@@ -42,3 +42,4 @@ loguru==0.7.3
 openai==1.58.1
 langchain==0.3.14
 langchain-community==0.3.14
+psycopg2-binary
