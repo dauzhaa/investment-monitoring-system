@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 import logging
 
 from app.core.config import settings
+from app.api.endpoints import auth, reports
 
 logging.basicConfig(
     level=logging.INFO,
@@ -35,6 +36,18 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+app.include_router(
+    auth.router,
+    prefix="/api/v1/auth",
+    tags=["1. Authentication"]
+)
+
+app.include_router(
+    reports.router,
+    prefix="/api/v2/reports",
+    tags=["2. Reports"]
 )
 
 
