@@ -1,5 +1,4 @@
-from pydantic import BaseModel, EmailStr
-from pydantic_settings import ConfigDict
+from pydantic import BaseModel, EmailStr, ConfigDict
 
 class OrganizationBase(BaseModel):
     name: str

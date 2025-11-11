@@ -1,7 +1,7 @@
-from pydantic import BaseModel
-from pydantic_settings import ConfigDict
+from pydantic import BaseModel, ConfigDict
 from app.models.investment_report import ReportStatus
 from datetime import datetime
+from typing import Any
 class ReportBase(BaseModel):
     report_year: int
     

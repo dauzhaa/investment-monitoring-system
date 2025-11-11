@@ -7,29 +7,22 @@ from app.core.config import settings
 
 from app.api.dependencies import get_current_user
 from app.models import User
-from app.core.database import get_db
-from app.services import excel_processor
+from app.tasks import excel_tasks
 
 router = APIRouter()
 
-@router.POST("/upload")
-async def upload_file(current_user: User = Depends(get_current_user), file: UploadFile = File(), db: AsyncSession = Depends(get_db)):
+@router.post("/upload")
+async def upload_file(current_user: User = Depends(get_current_user), file: UploadFile = File()):
     
     file_path = None
     
-    try:
-        file_path = os.path.join(settings.UPLOAD_PATH, file.filename)
+    file_path = os.path.join(settings.UPLOAD_PATH, file.filename)
         
-        content = await file.read()
+    content = await file.read()
         
-        async with aiofiles.open(file_path, 'wb') as f:
-            await f.write(content)
+    async with aiofiles.open(file_path, 'wb') as f:
+        await f.write(content)
             
-        reports_list = await excel_processor.process_excel(db=db, file_path=file_path, current_user=current_user)
+    excel_tasks.process_excel_task.delay(file_path=file_path, user_id=current_user.id)
         
-        return reports_list
-            
-    finally:
-        if file_path:
-            if await aiofiles.os.path.exists(file_path):
-                await aiofiles.os.remove(file_path)
+    return {"status": "File accepted", "detail":"Ваш файл принят в обработку..."}
