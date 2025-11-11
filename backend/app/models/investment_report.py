@@ -1,7 +1,8 @@
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from sqlalchemy import Integer, String, Text, ForeignKey, JSON, Enum as SQLEnum
+from sqlalchemy import Integer, String, Text, ForeignKey, JSON, Enum as SQLEnum, func
 from typing import List, Any
 from app.models.base import Base
+from datetime import datetime, timezone
 from enum import Enum
 
 class ReportStatus(str, Enum):
@@ -20,6 +21,11 @@ class InvestmentReport(Base):
         nullable = False
     )
     data: Mapped[dict[str, Any]] = mapped_column(JSON)
+    
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(),
+        nullable=False
+    )
     
     organization_id: Mapped[int | None] = mapped_column(
         ForeignKey("organization.id"), index=True
