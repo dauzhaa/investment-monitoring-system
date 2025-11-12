@@ -15,7 +15,7 @@ async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
 async def create_user(db: AsyncSession, user_in: UserCreate) -> User | None:
     hashed_password = hash_password(user_in.password)
     
-    db_user = User(email=user_in.email, hashed_password = hashed_password)
+    db_user = User(email=user_in.email, hashed_password = hashed_password, is_active=True)
     
     db.add(db_user)
     

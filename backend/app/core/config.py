@@ -2,6 +2,7 @@
 Configuration settings for the application
 """
 from typing import List, Union
+import json
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import AnyHttpUrl, field_validator
 
@@ -31,10 +32,16 @@ class Settings(BaseSettings):
     
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",")]
-        elif isinstance(v, (list, str)):
-            return v
+        if isinstance(v, str):
+            if v.startswith("["):
+                try:
+                    return json.loads(v)
+                except json.JSONDecodeError:
+                    raise ValueError(f"Invalid JSON string for BACKEND_CORS_ORIGINS: {v}")
+            else:
+                return [i.strip() for i in v.split(",")]
+        elif isinstance(v, list):
+            return v 
         raise ValueError(v)
     
     # File Upload
