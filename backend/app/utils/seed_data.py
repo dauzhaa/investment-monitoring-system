@@ -1,12 +1,12 @@
 import asyncio
 import csv
 import random
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, func
 from app.core.database import AsyncSessionLocal
 from app.models import Organization, InvestmentReport, User, Forecast
 from passlib.context import CryptContext
 
-# Координаты (оставляем как были)
+# Координаты (не меняем)
 MUNICIPALITIES_COORDS = {
     "г. Тюмень": (57.1522, 65.5419),
     "Тюменский район": (57.05, 65.40),
@@ -23,17 +23,18 @@ MUNICIPALITIES_COORDS = {
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 async def seed_data():
-    print("🌱 Начинаем (пере)генерацию данных с бюджетом ~5 млрд...")
+    print("🌱 Начинаем полную генерацию данных (Организации + Отчеты на ~5 млрд)...")
     
     async with AsyncSessionLocal() as session:
-        # 0. ОЧИСТКА ТАБЛИЦ (Чтобы суммы не дублировались при повторном запуске)
-        # Удаляем отчеты и прогнозы, организации оставляем
+        # 1. Очистка старых отчетов (чтобы не дублировать суммы)
+        # Организации НЕ удаляем, чтобы не ломать связи, если они есть.
+        # Но если база чистая, то и удалять нечего.
+        print("🧹 Очистка таблиц отчетов и прогнозов...")
         await session.execute(delete(InvestmentReport))
         await session.execute(delete(Forecast))
         await session.commit()
-        print("🧹 Старые отчеты удалены.")
 
-        # 1. Создаем админа (если нет)
+        # 2. Создаем админа
         admin_email = "admin@obr72.ru"
         existing_admin = await session.execute(select(User).where(User.email == admin_email))
         if not existing_admin.scalar():
@@ -45,68 +46,101 @@ async def seed_data():
             )
             session.add(admin)
             await session.commit()
-            print("✅ Админ проверен.")
+            print("✅ Админ проверен/создан.")
 
-        # 2. Загружаем Организации (если их нет)
-        # (Этот блок пропустим если организации уже есть, чтобы не дублировать логику)
+        # 3. Загружаем Организации из CSV (Твой старый надежный код)
+        # Сначала проверяем, есть ли они уже
+        res_count = await session.execute(select(func.count()).select_from(Organization))
+        count = res_count.scalar()
+        
+        if count == 0:
+            print("📂 Организаций нет. Загружаем из CSV...")
+            try:
+                # Путь внутри контейнера
+                with open("app/utils/НОВЫЙ_СПИСОК_без_дубликатов.csv", "r", encoding="utf-8-sig") as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        name = row.get('Наименование предприятия', 'Unknown')
+                        inn = row.get('ИНН', '').split('.')[0] 
+                        
+                        if not inn or len(inn) < 5: continue
+
+                        org_type = "Прочее"
+                        if "САД" in name.upper() or "ДОУ" in name.upper(): org_type = "ДОУ"
+                        elif "ШКОЛА" in name.upper() or "СОШ" in name.upper(): org_type = "Школа"
+                        elif "КОЛЛЕДЖ" in name.upper() or "ТЕХНИКУМ" in name.upper(): org_type = "Колледж"
+
+                        mun_names = list(MUNICIPALITIES_COORDS.keys())
+                        # Веса для реалистичного распределения (Тюмень больше)
+                        weights = [0.4, 0.15, 0.1, 0.1, 0.05, 0.05, 0.05, 0.05, 0.02, 0.03]
+                        municipality = random.choices(mun_names, weights=weights, k=1)[0]
+                        
+                        center_lat, center_lon = MUNICIPALITIES_COORDS[municipality]
+                        lat = center_lat + random.uniform(-0.05, 0.05)
+                        lon = center_lon + random.uniform(-0.05, 0.05)
+
+                        # Проверка дублей
+                        existing = await session.execute(select(Organization).where(Organization.inn == inn))
+                        if existing.scalar(): continue
+
+                        org = Organization(
+                            name=name,
+                            inn=inn,
+                            contact_email=row.get('Почта'),
+                            municipality=municipality,
+                            org_type=org_type,
+                            coordinates={"lat": lat, "lon": lon}
+                        )
+                        session.add(org)
+                
+                await session.commit()
+                print("✅ Организации успешно загружены из CSV.")
+            except FileNotFoundError:
+                print("❌ Файл CSV не найден! Проверьте app/utils/НОВЫЙ_СПИСОК_без_дубликатов.csv")
+        else:
+             print(f"ℹ️ Организации уже есть в базе ({count} шт). Пропускаем загрузку CSV.")
+
+        # 4. Генерируем отчеты (С НОВЫМИ УМЕНЬШЕННЫМИ СУММАМИ)
+        # Берем организации из базы
         res = await session.execute(select(Organization))
         db_orgs = res.scalars().all()
-        
-        if not db_orgs:
-            print("⚠️ Организаций нет в базе! Сначала загрузите их (или CSV файл не прочитался).")
-            # Тут должен быть код чтения CSV, но если ты уже запускал - они есть.
-            # Если вдруг база пустая - скопируй код чтения CSV из предыдущей версии.
-        else:
-             print(f"ℹ️ Найдено {len(db_orgs)} организаций. Генерируем отчеты...")
 
-        # 3. Генерируем отчеты (НОВЫЕ ЦИФРЫ)
         reports_count = 0
-        years = [2022, 2023, 2024] # Полные 3 года
+        years = [2022, 2023, 2024]
+        
+        print(f"📊 Генерируем финансовую историю для {len(db_orgs)} организаций...")
         
         for org in db_orgs:
-            # === НОВЫЕ БАЗОВЫЕ СТАВКИ (Уменьшили в 5 раз) ===
-            # Школа: ~250к в квартал -> 1 млн в год
-            # Садик: ~100к в квартал -> 400к в год
-            base_budget = 250_000 if org.org_type == "Школа" else 100_000
-            if org.org_type == "Колледж": base_budget = 1_000_000 # Колледжи богаче
+            # === БЮДЖЕТЫ (Реалистичные, ~5 млрд всего) ===
+            if org.org_type == "Школа":
+                base = 1_200_000 # 1.2 млн в квартал
+            elif org.org_type == "Колледж":
+                base = 3_000_000 # 3 млн в квартал
+            else: 
+                base = 500_000   # Садики
             
-            # Множитель масштаба (чтобы у всех было по-разному)
-            scale_factor = random.uniform(0.8, 1.5) 
+            scale = random.uniform(0.7, 1.3)
 
             for year in years:
                 for q in [1, 2, 3, 4]:
-                    # Убрали "future" проверку, заполняем весь 2024 год полностью
-                    
-                    # Сезонность: 
-                    # 1 кв - мало (закупки)
-                    # 2, 3 кв - ремонты (пик)
-                    # 4 кв - закрытие года (пик)
-                    season_coeff = 1.0
-                    if q == 1: season_coeff = 0.6
-                    if q == 3: season_coeff = 1.4 
-                    if q == 4: season_coeff = 1.8
-                    
-                    # Шум +/- 20%
-                    noise = random.uniform(0.8, 1.2)
+                    season = 1.0
+                    if q == 1: season = 0.5
+                    if q == 4: season = 1.8
+                    noise = random.uniform(0.85, 1.15)
 
-                    # Итоговая сумма
-                    total = base_budget * scale_factor * season_coeff * noise
-                    
-                    # Округляем до тысяч
+                    total = base * scale * season * noise
                     total = round(total, -3)
 
-                    # Разбивка по источникам (Примерная)
-                    fed = total * random.uniform(0.5, 0.7)
-                    reg = total * random.uniform(0.2, 0.3)
-                    own = total - fed - reg
-                    if own < 0: own = 0
-
+                    fed = total * 0.7
+                    reg = total * 0.25
+                    own = total * 0.05
+                    
                     report = InvestmentReport(
                         organization_id=org.id,
                         report_year=year,
                         quarter=q,
-                        status="submitted", # Все сдали для красивой картинки
-                        total_investment=round(total, 2),
+                        status="submitted", # Влезает в лимит базы
+                        total_investment=total,
                         budget_federal=round(fed, 2),
                         budget_regional=round(reg, 2),
                         own_funds=round(own, 2),
@@ -116,7 +150,7 @@ async def seed_data():
                     reports_count += 1
         
         await session.commit()
-        print(f"✅ Сгенерировано {reports_count} отчетов с реалистичными суммами.")
+        print(f"✅ Успешно! Сгенерировано {reports_count} отчетов.")
 
 if __name__ == "__main__":
     asyncio.run(seed_data())
