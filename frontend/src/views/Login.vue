@@ -7,7 +7,7 @@
              <v-avatar color="primary" size="64" class="mb-2">
                <v-icon icon="mdi-chart-line" size="32" color="white"></v-icon>
              </v-avatar>
-             <h2 class="text-h5 font-weight-bold text-primary">АИС Мониторинг</h2>
+             <h2 class="text-h5 font-weight-bold text-primary">InvestMonitor72</h2>
              <div class="text-caption text-grey">Вход в систему</div>
           </div>
 
@@ -59,8 +59,8 @@ import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import axios from 'axios';
 
-const email = ref('admin@obr72.ru'); // Предзаполним для удобства
-const password = ref('admin');
+const email = ref('');
+const password = ref('');
 const loading = ref(false);
 const router = useRouter();
 
@@ -71,7 +71,7 @@ const handleLogin = async () => {
     formData.append('username', email.value);
     formData.append('password', password.value);
 
-    const response = await axios.post('http://localhost:8000/api/v1/auth/token', formData);
+    const response = await axios.post('/api/v1/auth/token', formData);
     localStorage.setItem('token', response.data.access_token);
     router.push('/dashboard');
   } catch (error) {

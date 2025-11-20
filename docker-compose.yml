@@ -46,7 +46,7 @@ services:
     # 1. Применит миграции БД
     # 2. Сгенерирует данные и админа (seed_data)
     # 3. Запустит сервер
-    command: sh -c "alembic upgrade head && python -m app.utils.seed_data && python -m app.utils.seed_users && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    command: sh -c "alembic upgrade head && python -m app.utils.seed_data && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     ports:
       - "8000:8000"
     environment:

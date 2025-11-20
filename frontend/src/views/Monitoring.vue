@@ -197,7 +197,7 @@ const sendReminders = async () => {
   
   reminding.value = true;
   try {
-     await axios.post('http://localhost:8000/api/v1/monitoring/remind/all', null, {
+     await axios.post('/api/v1/monitoring/remind/all', null, {
         params: { year: selectedYear.value, quarter: selectedQuarter.value }
      });
      showMsg('Рассылка запущена успешно!', 'success');
@@ -215,7 +215,7 @@ const remindOne = (item) => {
 const downloadReport = async () => {
   downloading.value = true;
   try {
-    const response = await axios.get('http://localhost:8000/api/v1/monitoring/export/summary', {
+    const response = await axios.get('/api/v1/monitoring/export/summary', {
       params: { year: selectedYear.value, quarter: selectedQuarter.value },
       responseType: 'blob',
     });

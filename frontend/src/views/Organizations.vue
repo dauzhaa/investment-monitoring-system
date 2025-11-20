@@ -155,7 +155,7 @@ const headers = [
 const fetchData = async () => {
   loading.value = true;
   try {
-    const res = await axios.get('http://localhost:8000/api/v1/organizations/');
+    const res = await axios.get('/api/v1/organizations/');
     orgs.value = res.data;
     // Уникальные районы для фильтра
     municipalities.value = [...new Set(orgs.value.map(o => o.municipality))].sort();
@@ -192,7 +192,7 @@ const formatMoney = (val) => {
 
 const openDetails = async (item) => {
   try {
-    const res = await axios.get(`http://localhost:8000/api/v1/organizations/${item.id}`);
+    const res = await axios.get(`/api/v1/organizations/${item.id}`);
     selectedOrg.value = res.data;
     dialog.value = true;
   } catch (e) {

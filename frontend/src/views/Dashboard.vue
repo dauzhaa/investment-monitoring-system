@@ -151,14 +151,14 @@ const loadData = async () => {
   loading.value = true;
   try {
     // 1. Запускаем пересчет кластеров
-    await axios.post('http://localhost:8000/api/v1/analytics/calculate/clustering');
+    await axios.post('/api/v1/analytics/calculate/clustering');
     
     // 2. Загружаем карту
-    const mapRes = await axios.get('http://localhost:8000/api/v1/analytics/map');
+    const mapRes = await axios.get('/api/v1/analytics/map');
     clusterData.value = mapRes.data;
     
     // 3. Загружаем статистику (включая диаграмму и аномалии)
-    const statsRes = await axios.get('http://localhost:8000/api/v1/analytics/stats');
+    const statsRes = await axios.get('/api/v1/analytics/stats');
     stats.value = statsRes.data;
     
   } catch (e) {

@@ -60,7 +60,7 @@ const uploadFile = async () => {
   try {
     // Используем токен из localStorage
     const token = localStorage.getItem('token');
-    await axios.post('http://localhost:8000/upload', formData, {
+    await axios.post('/upload', formData, {
       headers: { Authorization: `Bearer ${token}` }
     });
     alert('Файл успешно загружен и отправлен в обработку!');

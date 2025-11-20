@@ -89,7 +89,7 @@ const barOption = ref({});
 const loadData = async () => {
   loading.value = true;
   try {
-    const res = await axios.get('http://localhost:8000/api/v1/analytics/trends');
+    const res = await axios.get('/api/v1/analytics/trends');
     const data = res.data;
     
     console.log("Trends Data:", data); // <-- ОТЛАДКА В КОНСОЛИ
