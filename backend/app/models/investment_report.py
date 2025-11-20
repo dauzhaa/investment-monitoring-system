@@ -21,7 +21,7 @@ class InvestmentReport(Base):
     quarter: Mapped[int] = mapped_column(Integer, nullable=False) # 1, 2, 3, 4
     
     status: Mapped[ReportStatus] = mapped_column(
-        SQLEnum(ReportStatus, native_enum=False),
+        SQLEnum(ReportStatus, native_enum=False, length=50),
         default=ReportStatus.PENDING,
         nullable=False
     )
