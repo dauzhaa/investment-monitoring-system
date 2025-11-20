@@ -171,7 +171,7 @@ const headers = [
 const loadData = async () => {
   loading.value = true;
   try {
-    const res = await axios.get('http://localhost:8000/api/v1/monitoring/status', {
+    const res = await axios.get('/api/v1/monitoring/status', {
         params: { year: selectedYear.value, quarter: selectedQuarter.value }
     });
     
