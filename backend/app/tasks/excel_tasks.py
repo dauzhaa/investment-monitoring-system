@@ -10,7 +10,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 async def async_process_excel(file_path: str, user_id: int):
-    """Async function that does the actual work"""
     async with AsyncSessionLocal() as db:
         user = await crud_user.get_user_by_id(db, user_id=user_id)
         if not user:
@@ -42,10 +41,8 @@ async def async_process_excel(file_path: str, user_id: int):
 
 @celery_app.task
 def process_excel_task(file_path: str, user_id: int):
-    """Synchronous Celery task that runs the async function"""
     logger.info(f"Starting Excel processing for user {user_id}")
     
-    # Run async function in new event loop
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)

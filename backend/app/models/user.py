@@ -1,5 +1,6 @@
+# backend/app/models/user.py
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from sqlalchemy import Integer, String, Text, Boolean, ForeignKey
+from sqlalchemy import Integer, String, Boolean, ForeignKey
 from typing import List
 from app.models.base import Base
 
