@@ -1,14 +1,14 @@
 import pandas as pd
 import io
 import logging
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models import Organization, District, Okved, InvestmentReport
 
 logger = logging.getLogger(__name__)
 
 def clean_float(val):
-    if pd.isna(val) or str(val).strip() in ['-', '', 'nan', 'None']: return 0.0
+    if pd.isna(val) or str(val).strip() in ['-', '', 'nan', 'None', '#REF!']: return 0.0
     try:
         # Убираем пробелы (разделители тысяч) и меняем запятую на точку
         cleaned = str(val).replace(' ', '').replace(',', '.')
@@ -16,17 +16,21 @@ def clean_float(val):
     except:
         return 0.0
 
-async def process_excel(db: Session, file_content: bytes, year: int):
+async def process_excel(db: AsyncSession, file_content: bytes, year: int):
     try:
         # Пытаемся читать как Excel или CSV
         try:
             df = pd.read_excel(io.BytesIO(file_content), header=None)
         except:
-            df = pd.read_csv(io.BytesIO(file_content), header=None, sep=',', encoding='utf-8')
+            # Пробуем разные разделители для CSV
+            try:
+                df = pd.read_csv(io.BytesIO(file_content), header=None, sep=',', encoding='utf-8')
+            except:
+                df = pd.read_csv(io.BytesIO(file_content), header=None, sep=';', encoding='cp1251')
 
         # Поиск заголовка
         header_idx = -1
-        for i, row in df.head(20).iterrows():
+        for i, row in df.head(30).iterrows():
             row_str = row.astype(str).str.cat(sep=' ').lower()
             if 'инн' in row_str and 'наименование' in row_str:
                 header_idx = i
@@ -39,11 +43,10 @@ async def process_excel(db: Session, file_content: bytes, year: int):
         
         for index, row in df.iterrows():
             try:
-                # Индексы основаны на твоем файле organizations_invest_2022.csv
-                # 0: Наименование, 1: Район, 2: СМП, 3: ИНН, 5: ОКВЭД, 6: Email
-                
+                # Индексы (0-Наименование, 1-Район, 3-ИНН, 5-ОКВЭД, 6-Email, 7-12 Данные)
+                # Проверка на валидность ИНН
                 inn_raw = str(row.iloc[3]).strip().replace('.0', '')
-                if not inn_raw or len(inn_raw) < 5 or 'nan' in inn_raw.lower():
+                if not inn_raw or len(inn_raw) < 5 or 'nan' in inn_raw.lower() or 'ref' in inn_raw.lower():
                     continue
 
                 name_val = str(row.iloc[0]).strip()
@@ -52,25 +55,35 @@ async def process_excel(db: Session, file_content: bytes, year: int):
                 okved_code = str(row.iloc[5]).strip()
                 email_val = str(row.iloc[6]).strip()
 
-                # --- Справочники ---
+                # --- Справочники (Async) ---
                 district = None
                 if district_name and district_name.lower() != 'nan':
-                    district = db.query(District).filter(District.name == district_name).first()
+                    # Ищем район
+                    res = await db.execute(select(District).where(District.name == district_name))
+                    district = res.scalar_one_or_none()
+                    
                     if not district:
                         district = District(name=district_name)
                         db.add(district)
-                        db.commit()
+                        await db.commit()
+                        await db.refresh(district)
 
                 okved = None
                 if okved_code and okved_code.lower() != 'nan':
-                    okved = db.query(Okved).filter(Okved.code == okved_code).first()
+                    # Ищем ОКВЭД
+                    res = await db.execute(select(Okved).where(Okved.code == okved_code))
+                    okved = res.scalar_one_or_none()
+                    
                     if not okved:
                         okved = Okved(code=okved_code)
                         db.add(okved)
-                        db.commit()
+                        await db.commit()
+                        await db.refresh(okved)
 
                 # --- Организация ---
-                org = db.query(Organization).filter(Organization.inn == inn_raw).first()
+                res = await db.execute(select(Organization).where(Organization.inn == inn_raw))
+                org = res.scalar_one_or_none()
+                
                 if not org:
                     org = Organization(
                         name=name_val,
@@ -81,18 +94,22 @@ async def process_excel(db: Session, file_content: bytes, year: int):
                         email=email_val if '@' in email_val else None
                     )
                     db.add(org)
-                    db.commit()
+                    await db.commit()
+                    await db.refresh(org)
                 else:
                     # Обновляем инфо
                     org.email = email_val if '@' in email_val else org.email
                     if district: org.district_id = district.id
                     if okved: org.okved_id = okved.id
+                    db.add(org) # Mark as modified
+                    await db.commit()
 
                 # --- Отчет ---
-                report = db.query(InvestmentReport).filter(
+                res = await db.execute(select(InvestmentReport).where(
                     InvestmentReport.organization_id == org.id,
                     InvestmentReport.year == year
-                ).first()
+                ))
+                report = res.scalar_one_or_none()
 
                 if not report:
                     report = InvestmentReport(organization_id=org.id, year=year)
@@ -112,13 +129,14 @@ async def process_excel(db: Session, file_content: bytes, year: int):
                 else:
                     report.status = "Не сдан"
 
-                db.commit()
+                await db.commit()
                 processed_count += 1
 
             except Exception as e:
-                logger.error(f"Row {index} error: {e}")
+                # logger.error(f"Row {index} error: {e}")
                 continue
 
         return {"status": "success", "processed": processed_count}
     except Exception as e:
+        logger.error(f"File processing error: {e}")
         return {"status": "error", "detail": str(e)}

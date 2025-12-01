@@ -1,7 +1,7 @@
 """
 Configuration settings for the application
 """
-from typing import List, Union
+from typing import List, Union, Optional
 import json
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import AnyHttpUrl, field_validator
@@ -51,14 +51,21 @@ class Settings(BaseSettings):
     # Email
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 587
-    SMTP_USER: str
-    SMTP_PASSWORD: str
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
     EMAIL_FROM: str = "noreply@investment-monitoring.ru"
     
+    # --- ДОБАВЛЕННЫЕ ПОЛЯ ДЛЯ АДМИНА ---
+    FIRST_SUPERUSER: str = "admin@example.com"
+    FIRST_SUPERUSER_PASSWORD: str = "admin"
+    
+    # Объединяем конфигурацию в один блок
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        case_sensitive=True
+        case_sensitive=True,
+        env_ignore_empty=True,
+        extra="ignore"
     )
 
 

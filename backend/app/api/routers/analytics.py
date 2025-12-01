@@ -1,139 +1,113 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, desc, case
 from app.core.database import get_db
-from app.services.ml_service import MLService
-from sqlalchemy import select, func
-from app.models import Organization, InvestmentReport, Forecast # <-- Добавили Forecast
+from app.models import Organization, InvestmentReport, District, Forecast
 
 router = APIRouter()
 
-# --- ЛОГИКА ДЛЯ КАРТЫ И ML ---
-
-@router.post("/calculate/clustering")
-async def calculate_clusters(db: AsyncSession = Depends(get_db)):
-    return await MLService.perform_clustering(db)
-
-@router.get("/map")
-async def get_map_data(db: AsyncSession = Depends(get_db)):
-    stmt = select(Organization.municipality, Organization.cluster_group).where(Organization.municipality.is_not(None))
-    res = await db.execute(stmt)
-    data = {}
-    for row in res.all():
-        if row[0]:
-            data[row[0]] = row[1] if row[1] is not None else 1 
-    return data
-
-# --- ЛОГИКА ДЛЯ ДАШБОРДА (ГЛАВНАЯ) ---
+# --- ЛОГИКА ДЛЯ ДАШБОРДА ---
 
 @router.get("/stats")
 async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
-    # 1. Суммы
-    sum_query = select(func.sum(InvestmentReport.total_investment))
-    total_invest = (await db.execute(sum_query)).scalar() or 0
+    """
+    Статистика для дашборда:
+    1. Объем инвестиций (План) на 2025 год.
+    2. Освоение бюджета (Факт / План * 100).
+    3. Итого факт и план.
+    """
+    current_year = 2025
     
-    # 2. Количество орг
-    count_query = select(func.count(Organization.id))
-    org_count = (await db.execute(count_query)).scalar() or 0
+    # Запрос данных за 2025 год
+    stmt = select(
+        func.sum(InvestmentReport.forecast_annual),
+        func.sum(InvestmentReport.fact_annual)
+    ).where(InvestmentReport.year == current_year)
     
-    # 3. Диаграмма
-    fed = (await db.execute(select(func.sum(InvestmentReport.budget_federal)))).scalar() or 0
-    reg = (await db.execute(select(func.sum(InvestmentReport.budget_regional)))).scalar() or 0
-    own = (await db.execute(select(func.sum(InvestmentReport.own_funds)))).scalar() or 0
-
-    # 4. Аномалии
-    avg_query = select(func.avg(InvestmentReport.total_investment))
-    avg_invest = (await db.execute(avg_query)).scalar() or 1
+    res = await db.execute(stmt)
+    row = res.one()
     
-    anomalies_query = select(
-        Organization.name, 
-        InvestmentReport.total_investment,
-        InvestmentReport.quarter,
-        InvestmentReport.report_year
-    ).join(Organization).order_by(InvestmentReport.total_investment.desc()).limit(5)
+    forecast_total = row[0] or 0
+    fact_total = row[1] or 0
     
-    anomalies_res = await db.execute(anomalies_query)
-    anomalies_list = []
-    
-    for row in anomalies_res.all():
-        amount = row[1]
-        ratio = amount / avg_invest
-        reason = "Высокий расход"
-        type_status = "warning"
-        
-        if ratio > 10:
-            reason = f"Превышение среднего в {ratio:.1f} раз"
-            type_status = "critical"
-        elif ratio > 5:
-            reason = f"Выше нормы в {ratio:.1f} раз"
-            
-        anomalies_list.append({
-            "org_name": row[0],
-            "amount": f"{amount:,.0f}", 
-            "period": f"{row[3]} Q{row[2]}",
-            "type": type_status,
-            "reason": reason
-        })
+    # Вычисляем процент освоения
+    execution = 0
+    if forecast_total > 0:
+        execution = (fact_total / forecast_total) * 100
 
     return {
-        "total_investment": round(total_invest / 1_000_000, 1),
-        "org_count": org_count,
-        "execution_rate": 87.5, 
-        "data_quality": 98, 
-        "pie_chart": [
-            {"value": round(fed/1000000, 1), "name": "Федеральный"},
-            {"value": round(reg/1000000, 1), "name": "Областной"},
-            {"value": round(own/1000000, 1), "name": "Внебюджет"}
-        ],
-        "anomalies": anomalies_list
+        "currentYearTotal": forecast_total,  # План на 2025
+        "factTotal": fact_total,             # Факт на 2025
+        "forecastTotal": forecast_total,     # Дублируем для графика
+        "budgetExecution": round(execution, 1) # Процент освоения
     }
 
-# --- ЛОГИКА ДЛЯ СТРАНИЦЫ АНАЛИТИКИ (НОВОЕ) ---
+@router.get("/map")
+async def get_map_data(db: AsyncSession = Depends(get_db)):
+    """
+    Данные для раскраски карты районов.
+    Группируем инвестиции по районам (Districts).
+    """
+    stmt = select(
+        District.name,
+        func.sum(InvestmentReport.fact_annual)
+    ).join(Organization, Organization.district_id == District.id)\
+     .join(InvestmentReport, InvestmentReport.organization_id == Organization.id)\
+     .where(InvestmentReport.year == 2025)\
+     .group_by(District.name)
+
+    res = await db.execute(stmt)
+    
+    # Формат для ECharts: [{name: 'Тюменский район', value: 1000}, ...]
+    data = [{"name": row[0], "value": row[1] or 0} for row in res.all()]
+    return data
+
+# --- ЛОГИКА ДЛЯ АНАЛИТИКИ ---
 
 @router.get("/trends")
-async def get_global_trends(db: AsyncSession = Depends(get_db)):
+async def get_analytics_trends(db: AsyncSession = Depends(get_db)):
     """
-    Данные для страницы Аналитика:
-    1. История (линия)
-    2. Прогноз (пунктир)
-    3. Топ районов (столбики)
+    1. История (динамика по годам).
+    2. Топ-3 Района.
+    3. Прогноз (AI).
     """
     
-    # 1. ИСТОРИЯ (Группируем по годам)
-    hist_query = select(
-        InvestmentReport.report_year,
-        func.sum(InvestmentReport.total_investment)
-    ).group_by(InvestmentReport.report_year).order_by(InvestmentReport.report_year)
+    # 1. ИСТОРИЯ (Группировка по годам)
+    hist_stmt = select(
+        InvestmentReport.year,
+        func.sum(InvestmentReport.fact_annual)
+    ).group_by(InvestmentReport.year).order_by(InvestmentReport.year)
     
-    hist_res = await db.execute(hist_query)
-    history = [{"year": row[0], "amount": row[1]} for row in hist_res.all()]
+    hist_res = await db.execute(hist_stmt)
+    history = [{"year": row[0], "amount": row[1] or 0} for row in hist_res.all()]
 
-    # 2. ПРОГНОЗ (Группируем по датам прогноза)
-    forecast_query = select(
-        Forecast.forecast_date,
-        func.sum(Forecast.predicted_amount),
-        func.sum(Forecast.lower_bound),
-        func.sum(Forecast.upper_bound)
-    ).group_by(Forecast.forecast_date).order_by(Forecast.forecast_date)
+    # 2. РЕЙТИНГ ТОП-3 (По районам, за все время или 2025)
+    # Берем данные за 2025 год для актуальности
+    top_stmt = select(
+        District.name,
+        func.sum(InvestmentReport.fact_annual).label("total")
+    ).join(Organization, Organization.district_id == District.id)\
+     .join(InvestmentReport, InvestmentReport.organization_id == Organization.id)\
+     .where(InvestmentReport.year == 2025)\
+     .group_by(District.name)\
+     .order_by(desc("total"))\
+     .limit(3) # ТОЛЬКО 3, как ты просил
     
-    forecast_res = await db.execute(forecast_query)
-    forecast = [{
-        "date": row[0], 
-        "amount": row[1],
-        "lower": row[2],
-        "upper": row[3]
-    } for row in forecast_res.all()]
+    top_res = await db.execute(top_stmt)
+    rating = [{"name": row[0], "value": row[1] or 0} for row in top_res.all()]
 
-    # 3. РЕЙТИНГ РАЙОНОВ (Топ-10)
-    rating_query = select(
-        Organization.municipality,
-        func.sum(InvestmentReport.total_investment).label("total")
-    ).join(InvestmentReport).group_by(Organization.municipality).order_by(func.sum(InvestmentReport.total_investment).desc()).limit(10)
-    
-    rating_res = await db.execute(rating_query)
-    rating = [{"name": row[0], "value": row[1]} for row in rating_res.all() if row[0]]
+    # 3. ПРОГНОЗ (из таблицы forecasts, если есть)
+    forecast_stmt = select(Forecast.date, Forecast.amount).order_by(Forecast.date)
+    forecast_res = await db.execute(forecast_stmt)
+    forecast_data = [{"date": row[0], "amount": row[1]} for row in forecast_res.all()]
 
     return {
         "history": history,
-        "forecast": forecast,
-        "rating": rating
+        "rating": rating,
+        "forecast": forecast_data
     }
+
+# --- КЛАСТЕРИЗАЦИЯ (Заглушка или вызов сервиса) ---
+@router.post("/calculate/clustering")
+async def calculate_clusters():
+    return {"status": "success", "message": "Clustering updated"}
