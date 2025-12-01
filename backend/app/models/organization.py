@@ -1,28 +1,36 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime
-from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship, Mapped, mapped_column
+from sqlalchemy import Integer, String, JSON
+from typing import List, TYPE_CHECKING
 from app.models.base import Base
 
-class Organization(Base):
-    """Сущность: Организация"""
-    __tablename__ = "organizations"
+if TYPE_CHECKING:
+    from .user import User
+    from .investment_report import InvestmentReport
+    from .forecast import Forecast
 
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True, nullable=False)
-    inn = Column(String, unique=True, index=True, nullable=False)
+class Organization(Base):
+    __tablename__ = 'organizations'  # <--- ВАЖНО: множественное число
     
-    # Внешние ключи на справочники
-    district_id = Column(Integer, ForeignKey("directory_districts.id"), nullable=True)
-    okved_id = Column(Integer, ForeignKey("directory_okveds.id"), nullable=True)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(512), nullable=False)
+    inn: Mapped[str] = mapped_column(String(12), unique=True, index=True, nullable=False)
+    contact_email: Mapped[str] = mapped_column(String(255), nullable=True)
     
-    # Атрибуты
-    is_smp = Column(Boolean, default=False) # Субъект малого предпринимательства
-    email = Column(String, nullable=True)
-    
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    # Поля
+    municipality: Mapped[str] = mapped_column(String(255), nullable=True, index=True)
+    org_type: Mapped[str] = mapped_column(String(50), nullable=True)
+    coordinates: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    cluster_group: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Связи
-    district = relationship("District", back_populates="organizations")
-    okved = relationship("Okved", back_populates="organizations")
-    reports = relationship("InvestmentReport", back_populates="organization")
+    users: Mapped[List["User"]] = relationship(back_populates='organization')
+    
+    reports: Mapped[List["InvestmentReport"]] = relationship(
+        back_populates="organization",
+        cascade="all, delete-orphan"
+    )
+    
+    forecasts: Mapped[List["Forecast"]] = relationship(
+        back_populates="organization",
+        cascade="all, delete-orphan"
+    )
