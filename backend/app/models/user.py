@@ -6,9 +6,10 @@ from app.models.base import Base
 if TYPE_CHECKING:
     from .organization import Organization
     from .investment_report import InvestmentReport
+    from .notification import Notification # <-- Добавь импорт
 
 class User(Base):
-    __tablename__ = 'users'  # Множественное число!
+    __tablename__ = 'users'
     
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
@@ -24,4 +25,10 @@ class User(Base):
     
     reports: Mapped[List["InvestmentReport"]] = relationship(
         back_populates="created_by_user"
+    )
+
+    # --- ДОБАВЬ ЭТУ СВЯЗЬ ---
+    notifications: Mapped[List["Notification"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan"
     )

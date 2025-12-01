@@ -1,17 +1,23 @@
-from datetime import datetime
-from sqlalchemy import Integer, String, Boolean, ForeignKey, DateTime, func, Text
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from .base import Base
+from sqlalchemy import Integer, String, Boolean, ForeignKey, DateTime
+from sqlalchemy.sql import func
+from typing import TYPE_CHECKING
+from app.models.base import Base
+
+if TYPE_CHECKING:
+    from .user import User
 
 class Notification(Base):
-    __tablename__ = 'notification'
-    
+    __tablename__ = 'notifications'  # Множественное число
+
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey('app_user.id', ondelete='CASCADE'))
+    # ИСПРАВЛЕНО: ссылка на 'users.id', а не 'app_user.id'
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     
-    type: Mapped[str] = mapped_column(String(50)) # reminder, report_submitted
-    title: Mapped[str] = mapped_column(String(255))
-    message: Mapped[str] = mapped_column(Text)
-    
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    message: Mapped[str] = mapped_column(String, nullable=False)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    
+    created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user: Mapped["User"] = relationship(back_populates="notifications")
