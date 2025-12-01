@@ -42,15 +42,10 @@ services:
   backend:
     build: ./backend
     container_name: investment_backend
-    # Эта команда при запуске:
-    # 1. Применит миграции БД
-    # 2. Сгенерирует данные и админа (seed_data)
-    # 3. Запустит сервер
     command: sh -c "alembic upgrade head && python -m app.utils.seed_data && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     ports:
       - "8000:8000"
     environment:
-      # Обрати внимание: хост БД теперь 'postgres', а не localhost
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/investment_db
       - REDIS_URL=redis://redis:6379/0
       - SECRET_KEY=supersecretkey12345changeinprod
@@ -62,12 +57,11 @@ services:
     networks:
       - investment_network
 
-  # 4. ФРОНТЕНД (Новое!)
   frontend:
     build: ./frontend
     container_name: investment_frontend
     ports:
-      - "80:80" # Сайт будет доступен на localhost:80
+      - "80:80"
     depends_on:
       - backend
     networks:

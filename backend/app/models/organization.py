@@ -1,37 +1,28 @@
-# backend/app/models/organization.py
-from sqlalchemy.orm import relationship, Mapped, mapped_column
-from sqlalchemy import Integer, String, Text, JSON
-from typing import List
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 from app.models.base import Base
-from typing import List, TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from .user import User
-    from .investment_report import InvestmentReport
-    from .forecast import Forecast
 class Organization(Base):
-    __tablename__ = 'organization'
-    
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(512), nullable=False)
-    inn: Mapped[str] = mapped_column(String(12), unique=True, index=True, nullable=False)
-    contact_email: Mapped[str] = mapped_column(String(255), nullable=True)
-    
-    # Новые поля
-    municipality: Mapped[str] = mapped_column(String(255), nullable=True, index=True)
-    org_type: Mapped[str] = mapped_column(String(50), nullable=True)
-    coordinates: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    cluster_group: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    """Сущность: Организация"""
+    __tablename__ = "organizations"
 
-    # Обрати внимание: User здесь в кавычках, чтобы не было кругового импорта
-    users: Mapped[List["User"]] = relationship(back_populates='organization')
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True, nullable=False)
+    inn = Column(String, unique=True, index=True, nullable=False)
     
-    reports: Mapped[List["InvestmentReport"]] = relationship(
-        back_populates="organization",
-        cascade="all, delete-orphan"
-    )
+    # Внешние ключи на справочники
+    district_id = Column(Integer, ForeignKey("directory_districts.id"), nullable=True)
+    okved_id = Column(Integer, ForeignKey("directory_okveds.id"), nullable=True)
     
-    forecasts: Mapped[List["Forecast"]] = relationship(
-        back_populates="organization",
-        cascade="all, delete-orphan"
-    )
+    # Атрибуты
+    is_smp = Column(Boolean, default=False) # Субъект малого предпринимательства
+    email = Column(String, nullable=True)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Связи
+    district = relationship("District", back_populates="organizations")
+    okved = relationship("Okved", back_populates="organizations")
+    reports = relationship("InvestmentReport", back_populates="organization")

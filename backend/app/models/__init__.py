@@ -1,15 +1,14 @@
-# backend/app/models/__init__.py
 from .base import Base
-from .user import User
 from .organization import Organization
-from .investment_report import InvestmentReport, ReportStatus
-from .forecast import Forecast
+from .dictionaries import District, Okved
+from .user import User, UserOrganization
+from .investment_report import InvestmentReport
+from .notification import Notification
 
 __all__ = [
     "Base",
-    "User",
-    "Organization",
+    "Organization", "District", "Okved",
+    "User", "UserOrganization",
     "InvestmentReport",
-    "ReportStatus",
-    "Forecast"
+    "Notification"
 ]

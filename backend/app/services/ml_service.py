@@ -130,8 +130,6 @@ class MLService:
         
         kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
         labels = kmeans.fit_predict(X_scaled)
-        
-        # 4. Определяем цвета (кто Лидер, кто Отстающий)
         # Создаем временный DataFrame чтобы понять среднее по кластерам
         df_res = pd.DataFrame({'label': labels, 'value': [x[0] for x in features]})
         # Сортируем кластеры по возрастанию денег
