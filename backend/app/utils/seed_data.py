@@ -14,6 +14,7 @@ async def seed_data():
     logger.info("🌱 Проверка наличия администратора...")
 
     async with async_session_factory() as session:
+        # Проверяем, существует ли админ
         result = await session.execute(select(User).where(User.email == settings.FIRST_SUPERUSER))
         user = result.scalar_one_or_none()
 
