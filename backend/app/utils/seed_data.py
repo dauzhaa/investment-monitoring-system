@@ -28,8 +28,7 @@ async def seed_data():
             user = User(
                 email=settings.FIRST_SUPERUSER,
                 hashed_password=get_password_hash(settings.FIRST_SUPERUSER_PASSWORD),
-                full_name="Administrator",
-                role="admin",
+                # Убрали full_name и role, так как их нет в модели
                 is_active=True,
                 is_superuser=True
             )
