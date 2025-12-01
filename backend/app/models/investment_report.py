@@ -1,17 +1,17 @@
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from sqlalchemy import Integer, Float, ForeignKey, UniqueConstraint, String
+from sqlalchemy import Integer, Float, ForeignKey, String, UniqueConstraint, DateTime
+from sqlalchemy.sql import func
 from typing import TYPE_CHECKING
 from app.models.base import Base
 
 if TYPE_CHECKING:
     from .organization import Organization
+    from .user import User
 
 class InvestmentReport(Base):
     __tablename__ = 'investment_reports'
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    
-    # ИСПРАВЛЕНО: ссылаемся на 'organizations.id'
     organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), nullable=False)
     
     year: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -24,6 +24,11 @@ class InvestmentReport(Base):
     fact_annual: Mapped[float] = mapped_column(Float, default=0.0)
     
     status: Mapped[str] = mapped_column(String(50), default="Не сдан")
+    created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # Поле создателя (опционально)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_by_user: Mapped["User"] = relationship(back_populates="reports")
 
     organization: Mapped["Organization"] = relationship(back_populates="reports")
 

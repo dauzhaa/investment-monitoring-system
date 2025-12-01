@@ -11,8 +11,6 @@ class District(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
-    
-    # Связь с организациями
     organizations: Mapped[List["Organization"]] = relationship(back_populates="district")
 
 class Okved(Base):
@@ -21,6 +19,4 @@ class Okved(Base):
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     code: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
     name: Mapped[str | None] = mapped_column(String, nullable=True)
-
-    # Связь с организациями
     organizations: Mapped[List["Organization"]] = relationship(back_populates="okved")
