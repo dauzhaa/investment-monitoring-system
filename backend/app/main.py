@@ -40,6 +40,8 @@ app.add_middleware(
         "http://localhost:3000",
         "http://127.0.0.1",
         "http://127.0.0.1:3000",
+        "http://77.95.201.98",      # <--- ДОБАВИТЬ ЭТО (IP сервера)
+        "http://77.95.201.98:80",
     ],
     allow_credentials=True,
     allow_methods=["*"],
