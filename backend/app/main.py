@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 import logging
 
 # Импорты
-from app.api.routers import analytics
+from app.api.routers import analytics, districts
 from app.core.config import settings
 from app.api.endpoints import auth, reports
 from app.api.routers import organizations
@@ -39,7 +39,8 @@ app.add_middleware(
         "http://localhost",
         "http://localhost:3000",
         "http://127.0.0.1",
-        "http://127.0.0.1:3000",], # Для разработки можно оставить *, перед деплоем верни список доменов
+        "http://127.0.0.1:3000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -48,7 +49,7 @@ app.add_middleware(
 # 1. Auth Router
 app.include_router(
     auth.router,
-    prefix="/api/v1/auth",  # <--- Обрати внимание на этот путь
+    prefix="/api/v1/auth",
     tags=["1. Authentication"]
 )
 
@@ -62,20 +63,29 @@ app.include_router(
 # 3. Analytics Router
 app.include_router(
     analytics.router,
-    prefix="/api/v1/analytics", # <--- Добавил префикс для порядка
+    prefix="/api/v1/analytics",
     tags=["3. Analytics"]
 )
 
+# 4. Organizations Router
+app.include_router(
+    organizations.router,
+    prefix="/api/v1/organizations",
+    tags=["4. Organizations"]
+)
+
+# 5. Monitoring Router
 app.include_router(
     monitoring.router, 
     prefix="/api/v1/monitoring", 
     tags=["5. Monitoring"]
 )
 
+# 6. Districts Router (новый)
 app.include_router(
-    organizations.router,
-    prefix="/api/v1/organizations",
-    tags=["4. Organizations"]
+    districts.router,
+    prefix="/api/v1/districts",
+    tags=["6. Districts"]
 )
 
 @app.get("/")

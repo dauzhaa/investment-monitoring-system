@@ -2,10 +2,11 @@ import { createRouter, createWebHistory } from 'vue-router';
 
 import Login from '@/views/Login.vue';
 import Upload from '@/views/Upload.vue';
-import Dashboard from '@/views/Dashboard.vue'; // Используй @ для единообразия
+import Dashboard from '@/views/Dashboard.vue';
 import Organizations from '@/views/Organizations.vue';
 import Analytics from '@/views/Analytics.vue';
 import Monitoring from '@/views/Monitoring.vue';
+import District from '@/views/District.vue';
 
 const routes = [
   // 1. Специфичные маршруты - СНАЧАЛА
@@ -26,6 +27,12 @@ const routes = [
     component: Dashboard,
     meta: { requiresAuth: true }
   },
+  {
+    path: '/district/:name',
+    name: 'district',
+    component: District,
+    meta: { requiresAuth: true }
+  },
   
   // 2. Корневой маршрут
   {
@@ -38,7 +45,7 @@ const routes = [
     name: 'analytics',
     component: Analytics,
     meta: { requiresAuth: true }
-},
+  },
 
   {
     path: '/organizations',
@@ -47,12 +54,12 @@ const routes = [
     meta: { requiresAuth: true }
   },
 
-{
-  path: '/monitoring',
-  name: 'monitoring',
-  component: Monitoring,
-  meta: { requiresAuth: true }
-},
+  {
+    path: '/monitoring',
+    name: 'monitoring',
+    component: Monitoring,
+    meta: { requiresAuth: true }
+  },
 
   // 3. Ловушка для всех несуществующих страниц - В САМОМ КОНЦЕ
   {
@@ -62,7 +69,7 @@ const routes = [
 ];
 
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL), // Для Vite лучше использовать import.meta.env
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes,
 });
 
