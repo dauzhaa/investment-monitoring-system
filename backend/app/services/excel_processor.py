@@ -9,13 +9,19 @@ from app.models.investment_report import ReportStatus
 
 logger = logging.getLogger(__name__)
 
-def clean_float(val):
-    """Очистка и конвертация значения в float"""
+def clean_float(val, multiply_by_1000: bool = True):
+    """
+    Очистка и конвертация значения в float.
+    multiply_by_1000: если True, умножает на 1000 (данные в тыс. рублей)
+    """
     if pd.isna(val) or str(val).strip() in ['-', '', 'nan', 'None', '#REF!', 'NaN']:
         return 0.0
     try:
-        cleaned = str(val).replace(' ', '').replace(',', '.').replace('\xa0', '')
-        return float(cleaned)
+        cleaned = str(val).replace(' ', '').replace(',', '.').replace('\xa0', '').replace(' ', '')
+        result = float(cleaned)
+        if multiply_by_1000:
+            result = result * 1000  # Конвертируем тыс. руб. в рубли
+        return result
     except:
         return 0.0
 
@@ -24,7 +30,6 @@ def clean_inn(val):
     if pd.isna(val):
         return None
     inn = str(val).strip().replace('.0', '').replace(' ', '')
-    # Убираем всё кроме цифр
     inn = re.sub(r'[^\d]', '', inn)
     if len(inn) >= 10 and len(inn) <= 12:
         return inn
@@ -34,7 +39,6 @@ def extract_year_from_headers(df):
     """Пытаемся извлечь год из заголовков"""
     for i, row in df.head(5).iterrows():
         row_str = ' '.join([str(x) for x in row.values])
-        # Ищем год в формате 2022, 2023, 2024, 2025
         match = re.search(r'20(2[2-9]|3[0-9])', row_str)
         if match:
             return int(match.group(0))
@@ -44,7 +48,10 @@ async def process_excel(db: AsyncSession, file_content: bytes, year: int = None)
     """
     Обработка Excel/CSV файла с данными организаций и инвестиций.
     
-    Ожидаемая структура (индексы столбцов):
+    ВАЖНО: Данные в файлах указаны в ТЫСЯЧАХ рублей, 
+    поэтому при сохранении умножаем на 1000!
+    
+    Структура столбцов:
     0 - Наименование организации
     1 - Район
     2 - СМП (да/нет)
@@ -52,13 +59,12 @@ async def process_excel(db: AsyncSession, file_content: bytes, year: int = None)
     4 - ОКПО (пропускаем)
     5 - ОКВЭД
     6 - Email
-    7 - Прогноз на год
-    8 - Q1 факт
-    9 - Q2 факт
-    10 - Q3 факт
-    11 - Q4 факт
-    12 - Годовой факт
-    13 - Причина отсутствия (пропускаем)
+    7 - Прогноз на год (тыс. руб)
+    8 - Q1 факт (тыс. руб)
+    9 - Q2 факт (тыс. руб)
+    10 - Q3 факт (тыс. руб)
+    11 - Q4 факт (тыс. руб)
+    12 - Годовой факт (тыс. руб)
     """
     try:
         # 1. Читаем файл
@@ -76,15 +82,14 @@ async def process_excel(db: AsyncSession, file_content: bytes, year: int = None)
         if year is None:
             year = extract_year_from_headers(df)
             if year is None:
-                year = 2024  # По умолчанию
-                logger.warning(f"Год не определен, используем {year}")
+                year = datetime.now().year
+                logger.warning(f"Год не определен, используем текущий: {year}")
         
         logger.info(f"Обработка данных за {year} год")
 
-        # 3. Пропускаем строки заголовков (ищем первую строку с данными)
+        # 3. Пропускаем строки заголовков
         start_row = 0
         for i, row in df.head(10).iterrows():
-            # Проверяем что в столбце 3 (ИНН) есть число
             inn_val = clean_inn(row.iloc[3] if len(row) > 3 else None)
             if inn_val:
                 start_row = i
@@ -100,23 +105,19 @@ async def process_excel(db: AsyncSession, file_content: bytes, year: int = None)
 
         for index, row in df.iterrows():
             try:
-                # Проверяем минимум столбцов
                 if len(row) < 7:
                     continue
 
-                # ИНН - обязательное поле
                 inn = clean_inn(row.iloc[3])
                 if not inn:
                     continue
 
-                # Базовые данные
                 name = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else f"Организация {inn}"
                 district_name = str(row.iloc[1]).strip() if pd.notna(row.iloc[1]) else None
                 is_smp = 'да' in str(row.iloc[2]).lower() if pd.notna(row.iloc[2]) else False
                 okved_code = str(row.iloc[5]).strip() if len(row) > 5 and pd.notna(row.iloc[5]) else None
                 email = str(row.iloc[6]).strip() if len(row) > 6 and pd.notna(row.iloc[6]) else None
                 
-                # Очищаем email
                 if email and '@' not in email:
                     email = None
                 if email and ';' in email:
@@ -136,7 +137,6 @@ async def process_excel(db: AsyncSession, file_content: bytes, year: int = None)
                 # --- ОКВЭД ---
                 okved = None
                 if okved_code and okved_code.lower() not in ['nan', 'none', '']:
-                    # Очищаем ОКВЭД
                     okved_code = str(okved_code).replace(' ', '')
                     res = await db.execute(select(Okved).where(Okved.code == okved_code))
                     okved = res.scalar_one_or_none()
@@ -162,7 +162,6 @@ async def process_excel(db: AsyncSession, file_content: bytes, year: int = None)
                     db.add(org)
                     await db.flush()
                 else:
-                    # Обновляем данные если есть новые
                     if district and not org.district_id:
                         org.district_id = district.id
                     if okved and not org.okved_id:
@@ -183,13 +182,13 @@ async def process_excel(db: AsyncSession, file_content: bytes, year: int = None)
                     report = InvestmentReport(organization_id=org.id, year=year)
                     db.add(report)
 
-                # Заполняем данные (столбцы 7-12)
-                report.forecast_annual = clean_float(row.iloc[7]) if len(row) > 7 else 0
-                report.fact_q1 = clean_float(row.iloc[8]) if len(row) > 8 else 0
-                report.fact_q2 = clean_float(row.iloc[9]) if len(row) > 9 else 0
-                report.fact_q3 = clean_float(row.iloc[10]) if len(row) > 10 else 0
-                report.fact_q4 = clean_float(row.iloc[11]) if len(row) > 11 else 0
-                report.fact_annual = clean_float(row.iloc[12]) if len(row) > 12 else 0
+                # !!! ВАЖНО: Умножаем на 1000, т.к. данные в тыс. рублей !!!
+                report.forecast_annual = clean_float(row.iloc[7], multiply_by_1000=True) if len(row) > 7 else 0
+                report.fact_q1 = clean_float(row.iloc[8], multiply_by_1000=True) if len(row) > 8 else 0
+                report.fact_q2 = clean_float(row.iloc[9], multiply_by_1000=True) if len(row) > 9 else 0
+                report.fact_q3 = clean_float(row.iloc[10], multiply_by_1000=True) if len(row) > 10 else 0
+                report.fact_q4 = clean_float(row.iloc[11], multiply_by_1000=True) if len(row) > 11 else 0
+                report.fact_annual = clean_float(row.iloc[12], multiply_by_1000=True) if len(row) > 12 else 0
 
                 # Если годовой факт не заполнен, считаем сумму кварталов
                 if report.fact_annual == 0:
@@ -203,7 +202,6 @@ async def process_excel(db: AsyncSession, file_content: bytes, year: int = None)
 
                 processed_count += 1
 
-                # Коммитим каждые 100 записей
                 if processed_count % 100 == 0:
                     await db.commit()
                     logger.info(f"Обработано {processed_count} записей...")
@@ -213,13 +211,12 @@ async def process_excel(db: AsyncSession, file_content: bytes, year: int = None)
                 logger.error(f"Ошибка в строке {index}: {e}")
                 continue
 
-        # Финальный коммит
         await db.commit()
         
         logger.info(f"Завершено: обработано {processed_count}, ошибок {errors_count}")
         return {"status": "success", "processed": processed_count, "errors": errors_count, "year": year}
 
     except Exception as e:
-        logger.error(f"Критическая ошибка обработки файла: {e}")
+        logger.error(f"Критическая ошибка: {e}")
         await db.rollback()
         return {"status": "error", "detail": str(e)}

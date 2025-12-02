@@ -1,12 +1,14 @@
-from fastapi import APIRouter, Depends, File, UploadFile, HTTPException
+from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, Form
 from sqlalchemy.ext.asyncio import AsyncSession
-import aiofiles
 import os
 from datetime import datetime
+from typing import Optional
+
 from app.core.config import settings
+from app.core.database import get_db
 from app.api.dependencies import get_current_user
 from app.models import User
-from app.tasks import excel_tasks
+from app.services.excel_processor import process_excel
 import logging
 
 router = APIRouter()
@@ -17,36 +19,46 @@ os.makedirs(settings.UPLOAD_PATH, exist_ok=True)
 
 @router.post("/upload")
 async def upload_file(
-    current_user: User = Depends(get_current_user), 
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    year: Optional[int] = Form(default=None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
+    """
+    Загрузка и обработка Excel файла с данными по инвестициям.
+    Год может быть указан явно или определен автоматически из файла.
+    """
     try:
-        # Generate unique filename to avoid conflicts
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        unique_filename = f"{timestamp}_{current_user.id}_{file.filename}"
-        file_path = os.path.join(settings.UPLOAD_PATH, unique_filename)
+        # Проверяем расширение
+        if not file.filename.endswith(('.xlsx', '.xls', '.csv')):
+            raise HTTPException(status_code=400, detail="Поддерживаются только файлы .xlsx, .xls, .csv")
         
-        logger.info(f"Uploading file: {file.filename} to {file_path}")
+        logger.info(f"Получен файл: {file.filename}, год: {year}, пользователь: {current_user.email}")
         
-        # Read and save file
+        # Читаем содержимое файла
         content = await file.read()
-        async with aiofiles.open(file_path, 'wb') as f:
-            await f.write(content)
         
-        logger.info(f"File saved successfully, queuing Celery task")
+        if len(content) == 0:
+            raise HTTPException(status_code=400, detail="Файл пустой")
         
-        # Queue Celery task
-        task = excel_tasks.process_excel_task.delay(
-            file_path=file_path, 
-            user_id=current_user.id
-        )
+        # Обрабатываем файл напрямую (без Celery для простоты)
+        result = await process_excel(db, content, year)
+        
+        if result.get("status") == "error":
+            raise HTTPException(status_code=400, detail=result.get("detail", "Ошибка обработки"))
+        
+        logger.info(f"Файл обработан: {result}")
         
         return {
-            "status": "File accepted", 
-            "detail": "Ваш файл принят в обработку...",
-            "task_id": task.id
+            "status": "success",
+            "message": "Файл успешно обработан",
+            "processed": result.get("processed", 0),
+            "errors": result.get("errors", 0),
+            "year": result.get("year")
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Upload error: {str(e)}")
+        logger.error(f"Ошибка загрузки: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
