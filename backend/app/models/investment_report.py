@@ -1,5 +1,5 @@
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from sqlalchemy import Integer, Float, ForeignKey, String, UniqueConstraint, DateTime
+from sqlalchemy import Integer, Float, ForeignKey, String, UniqueConstraint, DateTime, Text
 from sqlalchemy.sql import func
 from typing import TYPE_CHECKING
 from enum import Enum
@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 class ReportStatus(str, Enum):
     OVERDUE = "Просрочен"
     SUBMITTED = "Сдан"
+    NOT_PLANNED = "Не запланировано"
 
 class InvestmentReport(Base):
     __tablename__ = 'investment_reports'
@@ -27,6 +28,8 @@ class InvestmentReport(Base):
     fact_q3: Mapped[float] = mapped_column(Float, default=0.0)
     fact_q4: Mapped[float] = mapped_column(Float, default=0.0)
     fact_annual: Mapped[float] = mapped_column(Float, default=0.0)
+    
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     
     status: Mapped[str] = mapped_column(
         String(50), 

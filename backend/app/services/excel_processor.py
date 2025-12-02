@@ -20,40 +20,46 @@ def clean_float(val):
 
 async def process_excel(db: AsyncSession, file_content: bytes, year: int):
     try:
-        # Читаем Excel, все как строки, чтобы не потерять лидирующие нули в ИНН
+        # Читаем Excel, все как строки
         df = pd.read_excel(io.BytesIO(file_content), dtype=str)
         
         processed_count = 0
         
-        # Загружаем справочник районов для сопоставления: { "ишимский район": 5, ... }
+        # Справочник районов
         districts_res = await db.execute(select(District))
         districts_map = {d.name.lower().strip(): d.id for d in districts_res.scalars().all()}
 
-        # Пропускаем заголовок (обычно 1-я строка, но pandas сам её берет). 
-        # Если заголовки сложные, берем данные по индексам колонок:
-        # 0: Наименование, 1: Район, 3: ИНН, 6: Email
-        # 7: Прогноз, 8: Q1, 9: Q2, 10: Q3, 11: Q4, 12: Год
-        
+        # Индексы колонок на основе вашего файла 2022.xlsx:
+        # 0: Наименование
+        # 1: Район
+        # 3: ИНН
+        # 6: Email
+        # 7: Прогноз (Год)
+        # 8: Факт 1 кв
+        # 9: Факт 2 кв
+        # 10: Факт 3 кв
+        # 11: Факт 4 кв
+        # 12: Факт Год
+        # 13: Причина отсутствия инвестиций (Комментарий)
+
         for index, row in df.iterrows():
             try:
-                # 1. Парсим основные поля
+                # --- 1. Основные данные ---
                 name = str(row.iloc[0]).strip()
                 district_raw = str(row.iloc[1]).strip()
                 inn = str(row.iloc[3]).strip().replace('.0', '')
                 
-                # Валидация ИНН
+                # Валидация
                 if not inn.isdigit() or len(inn) not in [10, 12]:
                     continue
 
-                # 2. Ищем ID района
                 district_id = districts_map.get(district_raw.lower())
                 
-                # 3. Создаем или обновляем Организацию
+                # --- 2. Организация ---
                 stmt = select(Organization).where(Organization.inn == inn)
                 res = await db.execute(stmt)
                 org = res.scalar_one_or_none()
                 
-                # Email (если есть в 7-й колонке, индекс 6)
                 email = str(row.iloc[6]).split(';')[0].strip() if len(row) > 6 and '@' in str(row.iloc[6]) else None
 
                 if not org:
@@ -67,7 +73,6 @@ async def process_excel(db: AsyncSession, file_content: bytes, year: int):
                     await db.commit()
                     await db.refresh(org)
                 else:
-                    # Обновляем связь с районом и почту если их нет
                     updated = False
                     if district_id and org.district_id != district_id:
                         org.district_id = district_id
@@ -79,18 +84,39 @@ async def process_excel(db: AsyncSession, file_content: bytes, year: int):
                         db.add(org)
                         await db.commit()
 
-                # 4. Обработка Цифр (Инвестиции)
-                forecast = clean_float(row.iloc[7])
+                # --- 3. Финансовые данные и Статус ---
+                forecast = clean_float(row.iloc[7])  # Колонка 7 - Прогноз
                 f_q1 = clean_float(row.iloc[8])
                 f_q2 = clean_float(row.iloc[9])
                 f_q3 = clean_float(row.iloc[10])
                 f_q4 = clean_float(row.iloc[11])
-                f_annual = clean_float(row.iloc[12])
+                f_annual = clean_float(row.iloc[12]) # Колонка 12 - Факт Год
+                
+                # Считываем причину (Колонка 13)
+                reason = str(row.iloc[13]).strip() if len(row) > 13 else None
+                if reason and reason.lower() in ['nan', 'none', '-']:
+                    reason = None
 
-                # Логика статуса: Если есть годовой факт > 0 -> СДАН, иначе ПРОСРОЧЕН
-                status = ReportStatus.SUBMITTED.value if f_annual > 0 else ReportStatus.OVERDUE.value
+                # ЛОГИКА СТАТУСОВ:
+                status = ReportStatus.OVERDUE.value # По умолчанию
 
-                # 5. Создаем или обновляем Отчет
+                if f_annual > 0:
+                    # Если есть факт -> Сдан
+                    status = ReportStatus.SUBMITTED.value
+                elif forecast == 0 and f_annual == 0:
+                    # Если прогноз 0 и факт 0 -> Не запланировано
+                    status = ReportStatus.NOT_PLANNED.value
+                else:
+                    # Если прогноз > 0, а факт 0 -> Просрочен (для 2025)
+                    # Для прошлых лет (2022-2024), если факт 0, считаем, что не сдали, 
+                    # либо если есть "reason", можно ставить "Не запланировано", но ваша логика:
+                    # "где есть пропуски это организации которые не планировали бюджет"
+                    if year < 2025 and forecast == 0:
+                         status = ReportStatus.NOT_PLANNED.value
+                    else:
+                         status = ReportStatus.OVERDUE.value
+
+                # --- 4. Сохранение отчета ---
                 rep_stmt = select(InvestmentReport).where(
                     and_(InvestmentReport.organization_id == org.id, InvestmentReport.year == year)
                 )
@@ -106,11 +132,11 @@ async def process_excel(db: AsyncSession, file_content: bytes, year: int):
                         fact_q3=f_q3,
                         fact_q4=f_q4,
                         fact_annual=f_annual,
-                        status=status
+                        status=status,
+                        comment=reason # Сохраняем причину
                     )
                     db.add(report)
                 else:
-                    # Обновляем существующий отчет
                     report.forecast_annual = forecast
                     report.fact_q1 = f_q1
                     report.fact_q2 = f_q2
@@ -118,13 +144,13 @@ async def process_excel(db: AsyncSession, file_content: bytes, year: int):
                     report.fact_q4 = f_q4
                     report.fact_annual = f_annual
                     report.status = status
+                    report.comment = reason
                     db.add(report)
                 
                 await db.commit()
                 processed_count += 1
 
             except Exception as e:
-                # logger.warning(f"Row error: {e}")
                 continue
 
         return {"status": "success", "processed": processed_count}
