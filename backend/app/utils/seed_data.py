@@ -12,8 +12,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 async def seed_districts(session):
-    """Создает районы в базе данных, если их нет"""
-    # Список районов точно как в ваших Excel файлах
+    """Заполняет справочник районов (важно для карты и статистики)"""
+    # Список должен совпадать с тем, что в Excel (колонке Район)
     districts_list = [
         "Абатский район", "Армизонский район", "Аромашевский район", 
         "Бердюжский район", "Вагайский район", "Викуловский район", 
@@ -26,48 +26,40 @@ async def seed_districts(session):
         "Ялуторовский район", "Ялуторовск", "г. Ялуторовск", "Ярковский район"
     ]
     
-    logger.info("🗺 Проверка и создание районов...")
+    logger.info("🗺 Создание районов...")
     for dist_name in districts_list:
-        # Проверяем, есть ли район
         stmt = select(District).where(District.name == dist_name)
-        result = await session.execute(stmt)
-        existing = result.scalar_one_or_none()
+        existing = (await session.execute(stmt)).scalar_one_or_none()
         
         if not existing:
-            new_dist = District(name=dist_name)
-            session.add(new_dist)
+            session.add(District(name=dist_name))
     
     await session.commit()
-    logger.info("✅ Справочник районов обновлен.")
 
 async def seed_data():
-    logger.info("🌱 Начало инициализации данных...")
+    logger.info("🌱 Инициализация БД...")
 
     async with async_session_factory() as session:
-        # 1. Создание АДМИНА
-        result = await session.execute(select(User).where(User.email == settings.FIRST_SUPERUSER))
-        user = result.scalar_one_or_none()
-
-        if not user:
+        # 1. Админ
+        res = await session.execute(select(User).where(User.email == settings.FIRST_SUPERUSER))
+        if not res.scalar_one_or_none():
             user = User(
                 email=settings.FIRST_SUPERUSER,
                 hashed_password=get_password_hash(settings.FIRST_SUPERUSER_PASSWORD),
-                is_active=True,
-                is_superuser=True
+                is_active=True, is_superuser=True
             )
             session.add(user)
             await session.commit()
-            logger.info("✅ Администратор создан.")
+            logger.info("✅ Админ создан")
 
-        # 2. Создание РАЙОНОВ (Обязательно перед загрузкой Excel)
+        # 2. Районы (ОБЯЗАТЕЛЬНО)
         await seed_districts(session)
 
-        # 3. Загрузка EXCEL
-        # Путь: backend/app/initial_data
+        # 3. Загрузка Excel
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        data_dir = os.path.join(base_dir, "initial_data")
+        data_dir = os.path.join(base_dir, "initial_data") # Папка с вашими файлами
         
-        # Словарь файлов (ищем .xlsx)
+        # Файлы для загрузки
         files_to_load = {
             "2022.xlsx": 2022,
             "2023.xlsx": 2023,
@@ -79,14 +71,14 @@ async def seed_data():
             for filename, year in files_to_load.items():
                 file_path = os.path.join(data_dir, filename)
                 if os.path.exists(file_path):
-                    logger.info(f"📂 Обработка {filename}...")
+                    logger.info(f"📂 Загрузка {filename} за {year} год...")
                     try:
                         with open(file_path, "rb") as f:
                             content = f.read()
                         res = await process_excel(session, content, year)
                         logger.info(f"   -> {res}")
                     except Exception as e:
-                        logger.error(f"❌ Ошибка {filename}: {e}")
+                        logger.error(f"❌ Ошибка: {e}")
         else:
             logger.warning(f"Папка {data_dir} не найдена!")
 
