@@ -31,7 +31,13 @@
         </v-col>
 
         <v-col cols="12" md="3">
-          <v-btn block color="success" prepend-icon="mdi-file-excel" @click="downloadSummary">
+          <v-btn 
+            block 
+            color="success" 
+            prepend-icon="mdi-file-excel" 
+            @click="downloadSummary"
+            :loading="downloading"
+          >
             Скачать свод (Excel)
           </v-btn>
         </v-col>
@@ -47,18 +53,17 @@
     >
       <template v-slot:item.status="{ item }">
         <v-chip 
-          :color="item.status === 'submitted' ? 'green-lighten-4' : 'red-lighten-4'" 
-          :class="item.status === 'submitted' ? 'text-green-darken-3' : 'text-red-darken-3'"
+          :color="getStatusColor(item.status)" 
           size="small"
           class="font-weight-bold"
         >
-          {{ item.status === 'submitted' ? 'Сдан' : 'Не сдан' }}
+          {{ item.status }}
         </v-chip>
       </template>
 
       <template v-slot:item.actions="{ item }">
-        <div class="d-flex gap-2">
-            <v-btn v-if="item.status === 'submitted'" 
+        <div class="d-flex gap-2 justify-end">
+            <v-btn v-if="item.status === 'Сдан'" 
                    icon="mdi-download" 
                    size="small" 
                    color="primary" 
@@ -83,11 +88,12 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
-import axios from 'axios';
+import axios from '@/services/api'; // Use configured api instance
 
 const selectedYear = ref(2025);
-const selectedQuarter = ref(0); // 0 = Весь год по умолчанию
+const selectedQuarter = ref(0); 
 const loading = ref(false);
+const downloading = ref(false);
 const organizations = ref([]);
 
 const quarters = [
@@ -106,10 +112,16 @@ const headers = [
     { title: 'Действия', key: 'actions', align: 'end', sortable: false }
 ];
 
+const getStatusColor = (status) => {
+    if (status === 'Сдан') return 'green-lighten-4 text-green-darken-3';
+    if (status === 'Не запланировано') return 'grey-lighten-2 text-grey-darken-2';
+    return 'red-lighten-4 text-red-darken-3';
+};
+
 const loadData = async () => {
     loading.value = true;
     try {
-        const res = await axios.get('/api/v1/monitoring/status', {
+        const res = await axios.get('/monitoring/status', {
             params: { year: selectedYear.value, quarter: selectedQuarter.value }
         });
         organizations.value = res.data.items;
@@ -120,22 +132,39 @@ const loadData = async () => {
     }
 };
 
-const downloadSummary = () => {
-    const url = `/api/v1/monitoring/export/quarterly?year=${selectedYear.value}&quarter=${selectedQuarter.value}`;
-    // Открываем в новой вкладке, чтобы браузер начал скачивание
-    window.open(axios.defaults.baseURL + url, '_blank');
+const downloadSummary = async () => {
+    downloading.value = true;
+    try {
+        const response = await axios.get('/monitoring/export/quarterly', {
+            params: { year: selectedYear.value, quarter: selectedQuarter.value },
+            responseType: 'blob' // Important for binary files
+        });
+        
+        // Create link to download
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `report_${selectedYear.value}_q${selectedQuarter.value}.xlsx`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    } catch (e) {
+        console.error('Ошибка скачивания:', e);
+        alert('Не удалось скачать файл');
+    } finally {
+        downloading.value = false;
+    }
 };
 
-const downloadOrgReport = (orgId) => {
-    const url = `/api/v1/monitoring/export/organization/${orgId}?year=${selectedYear.value}&quarter=${selectedQuarter.value}`;
-    window.open(axios.defaults.baseURL + url, '_blank');
+const downloadOrgReport = async (orgId) => {
+    // Similar logic for individual reports if needed
+    alert('Функция скачивания индивидуального отчета в разработке');
 };
 
 const remindOrg = async (item) => {
     if(!item.email) return alert('У этой организации нет Email!');
-    
     try {
-        await axios.post('/api/v1/monitoring/remind', {
+        await axios.post('/monitoring/remind', {
             organization_id: item.id,
             year: selectedYear.value,
             quarter: selectedQuarter.value,

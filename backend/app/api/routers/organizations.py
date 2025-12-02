@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 from app.core.database import get_db
 from app.models import Organization, InvestmentReport
 from fastapi.responses import StreamingResponse
@@ -13,19 +14,19 @@ router = APIRouter()
 @router.get("/")
 async def get_organizations(db: AsyncSession = Depends(get_db)):
     """
-    Список всех организаций для таблицы.
-    Возвращает базовую инфу + сумму инвестиций + кластер.
+    Список всех организаций
     """
-    # Считаем сумму инвестиций для каждой организации
+    # Sum investments
     subquery = select(
         InvestmentReport.organization_id,
-        func.sum(InvestmentReport.total_investment).label("total_money")
+        func.sum(InvestmentReport.fact_annual).label("total_money") # Use fact_annual
     ).group_by(InvestmentReport.organization_id).subquery()
 
-    # Соединяем организации с их деньгами
-    stmt = select(Organization, subquery.c.total_money).outerjoin(
-        subquery, Organization.id == subquery.c.organization_id
-    ).order_by(Organization.name)
+    # Join
+    stmt = select(Organization, subquery.c.total_money)\
+        .outerjoin(subquery, Organization.id == subquery.c.organization_id)\
+        .options(selectinload(Organization.district))\
+        .order_by(Organization.name)
 
     res = await db.execute(stmt)
     orgs = []
@@ -35,8 +36,9 @@ async def get_organizations(db: AsyncSession = Depends(get_db)):
             "id": org.id,
             "name": org.name,
             "inn": org.inn,
-            "municipality": org.municipality,
-            "cluster_group": org.cluster_group, # 0, 1, 2
+            # Return district name as municipality for frontend compatibility
+            "municipality": org.district.name if org.district else "Не указан",
+            "is_smp": org.is_smp,
             "total_investment": total if total else 0
         })
     return orgs
