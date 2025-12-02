@@ -2,7 +2,7 @@ import pandas as pd
 import io
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, and_
 from app.models import Organization, District, Okved, InvestmentReport
 from app.models.investment_report import ReportStatus
 
@@ -11,7 +11,6 @@ logger = logging.getLogger(__name__)
 def clean_float(val):
     if pd.isna(val) or str(val).strip() in ['-', '', 'nan', 'None', '#REF!']: return 0.0
     try:
-        # Убираем пробелы (разделители тысяч) и меняем запятую на точку
         cleaned = str(val).replace(' ', '').replace(',', '.')
         return float(cleaned)
     except:
@@ -19,122 +18,101 @@ def clean_float(val):
 
 async def process_excel(db: AsyncSession, file_content: bytes, year: int):
     try:
-        # Пытаемся читать как Excel или CSV
+        # 1. Попытка прочитать как CSV с игнорированием ошибок строк
+        # dtype=str важен, чтобы ИНН не превратился в число с плавающей точкой
         try:
-            df = pd.read_excel(io.BytesIO(file_content), header=None)
+            df = pd.read_csv(io.BytesIO(file_content), header=None, dtype=str, on_bad_lines='skip', sep=',')
+            # Если разделитель не сработал (мало колонок), пробуем ;
+            if df.shape[1] < 2:
+                 df = pd.read_csv(io.BytesIO(file_content), header=None, dtype=str, on_bad_lines='skip', sep=';')
         except:
-            # Пробуем разные разделители для CSV
-            try:
-                df = pd.read_csv(io.BytesIO(file_content), header=None, sep=',', encoding='utf-8')
-            except:
-                df = pd.read_csv(io.BytesIO(file_content), header=None, sep=';', encoding='cp1251')
-
-        # Поиск заголовка
-        header_idx = -1
-        for i, row in df.head(30).iterrows():
-            row_str = row.astype(str).str.cat(sep=' ').lower()
-            if 'инн' in row_str and 'наименование' in row_str:
-                header_idx = i
-                break
-        
-        if header_idx != -1:
-            df = df.iloc[header_idx+1:].reset_index(drop=True)
+            # Если совсем не CSV, пробуем Excel
+            df = pd.read_excel(io.BytesIO(file_content), header=None, dtype=str)
 
         processed_count = 0
         
         for index, row in df.iterrows():
             try:
-                # Индексы (0-Наименование, 1-Район, 3-ИНН, 5-ОКВЭД, 6-Email, 7-12 Данные)
-                # Проверка на валидность ИНН
-                inn_raw = str(row.iloc[3]).strip().replace('.0', '')
-                if not inn_raw or len(inn_raw) < 5 or 'nan' in inn_raw.lower() or 'ref' in inn_raw.lower():
+                raw_str = str(row.values)
+                # Пропускаем служебные строки из логов или заголовки
+                if "source:" in raw_str or "Наименование" in raw_str:
                     continue
 
-                name_val = str(row.iloc[0]).strip()
-                district_name = str(row.iloc[1]).strip()
-                is_smp = 'да' in str(row.iloc[2]).lower()
-                okved_code = str(row.iloc[5]).strip()
-                email_val = str(row.iloc[6]).strip()
+                # Логика для списка организаций (CSV)
+                # Обычно: 0-№, 1-Имя, 2-ИНН, 3-Почта (в твоем файле ИНН часто в 3й колонке, индекс 2)
+                
+                # Ищем ИНН. Он может быть в 2 или 3 колонке
+                inn = None
+                name = None
+                email = None
+                
+                # Проходим по ячейкам строки и ищем похожий на ИНН
+                for col_idx in range(len(row)):
+                    val = str(row.iloc[col_idx]).strip().replace('.0', '')
+                    if val.isdigit() and len(val) in [10, 12]:
+                        inn = val
+                        # Обычно имя перед ИНН
+                        if col_idx > 0:
+                            name = str(row.iloc[col_idx-1]).strip()
+                        # А почта после
+                        if col_idx + 1 < len(row):
+                            email_raw = str(row.iloc[col_idx+1]).strip()
+                            if '@' in email_raw:
+                                email = email_raw.split(';')[0].split(',')[0].strip()
+                        break
+                
+                # Если не нашли автоматическим перебором, пробуем жесткие индексы для твоего файла
+                if not inn:
+                    possible_inn = str(row.iloc[2]).strip().replace('.0', '')
+                    if possible_inn.isdigit() and len(possible_inn) in [10, 12]:
+                        inn = possible_inn
+                        name = str(row.iloc[1]).strip()
+                        email_raw = str(row.iloc[3]).strip()
+                        email = email_raw if '@' in email_raw else None
 
-                # --- Справочники (Async) ---
-                district = None
-                if district_name and district_name.lower() != 'nan':
-                    # Ищем район
-                    res = await db.execute(select(District).where(District.name == district_name))
-                    district = res.scalar_one_or_none()
-                    
-                    if not district:
-                        district = District(name=district_name)
-                        db.add(district)
-                        await db.commit()
-                        await db.refresh(district)
+                if not inn or not name:
+                    continue
 
-                okved = None
-                if okved_code and okved_code.lower() != 'nan':
-                    # Ищем ОКВЭД
-                    res = await db.execute(select(Okved).where(Okved.code == okved_code))
-                    okved = res.scalar_one_or_none()
-                    
-                    if not okved:
-                        okved = Okved(code=okved_code)
-                        db.add(okved)
-                        await db.commit()
-                        await db.refresh(okved)
-
-                # --- Организация ---
-                res = await db.execute(select(Organization).where(Organization.inn == inn_raw))
+                # --- Работа с БД ---
+                # 1. Организация
+                res = await db.execute(select(Organization).where(Organization.inn == inn))
                 org = res.scalar_one_or_none()
                 
                 if not org:
                     org = Organization(
-                        name=name_val,
-                        inn=inn_raw,
-                        district_id=district.id if district else None,
-                        okved_id=okved.id if okved else None,
-                        is_smp=is_smp,
-                        email=email_val if '@' in email_val else None
+                        name=name,
+                        inn=inn,
+                        contact_email=email
                     )
                     db.add(org)
                     await db.commit()
                     await db.refresh(org)
                 else:
-                    # Обновляем инфо
-                    org.email = email_val if '@' in email_val else org.email
-                    if district: org.district_id = district.id
-                    if okved: org.okved_id = okved.id
-                    db.add(org) # Mark as modified
-                    await db.commit()
+                    # Обновляем email если есть
+                    if email and not org.contact_email:
+                        org.contact_email = email
+                        db.add(org)
+                        await db.commit()
 
-                # --- Отчет ---
-                res = await db.execute(select(InvestmentReport).where(
-                    InvestmentReport.organization_id == org.id,
-                    InvestmentReport.year == year
+                # 2. Отчет (заглушка "Не сдан", если нет)
+                res_rep = await db.execute(select(InvestmentReport).where(
+                    and_(InvestmentReport.organization_id == org.id, InvestmentReport.year == year)
                 ))
-                report = res.scalar_one_or_none()
+                report = res_rep.scalar_one_or_none()
 
                 if not report:
-                    report = InvestmentReport(organization_id=org.id, year=year)
+                    report = InvestmentReport(
+                        organization_id=org.id, 
+                        year=year, 
+                        status=ReportStatus.OVERDUE.value
+                    )
                     db.add(report)
+                    await db.commit()
 
-                # Данные по столбцам (7 - Прогноз, 8-11 Кварталы, 12 Год)
-                report.forecast_annual = clean_float(row.iloc[7])
-                report.fact_q1 = clean_float(row.iloc[8])
-                report.fact_q2 = clean_float(row.iloc[9])
-                report.fact_q3 = clean_float(row.iloc[10])
-                report.fact_q4 = clean_float(row.iloc[11])
-                report.fact_annual = clean_float(row.iloc[12])
-
-                # Статус
-                if report.fact_annual > 0 or report.fact_q1 > 0:
-                    report.status = ReportStatus.SUBMITTED.value
-                else:
-                    report.status = ReportStatus.OVERDUE.value
-
-                await db.commit()
                 processed_count += 1
 
             except Exception as e:
-                # logger.error(f"Row {index} error: {e}")
+                # logger.error(f"Row error: {e}")
                 continue
 
         return {"status": "success", "processed": processed_count}
