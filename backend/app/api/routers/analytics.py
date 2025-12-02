@@ -77,6 +77,8 @@ async def get_district_stats(
     db: AsyncSession = Depends(get_db)
 ):
     """Статистика по конкретному району"""
+    from sqlalchemy.orm import selectinload
+    
     # Находим район
     district_res = await db.execute(
         select(District).where(District.name == district_name)
@@ -84,16 +86,23 @@ async def get_district_stats(
     district = district_res.scalar_one_or_none()
     
     if not district:
-        return {"error": "Район не найден"}
+        return {
+            "name": district_name,
+            "organizationCount": 0,
+            "totalFact": 0,
+            "totalForecast": 0,
+            "byYear": [],
+            "error": "Район не найден в базе данных"
+        }
     
-    # Количество организаций
+    # Количество организаций в районе
     org_count_res = await db.execute(
         select(func.count(Organization.id))
         .where(Organization.district_id == district.id)
     )
     org_count = org_count_res.scalar() or 0
     
-    # Сумма инвестиций за все годы
+    # Общая сумма инвестиций
     total_res = await db.execute(
         select(
             func.sum(InvestmentReport.fact_annual),
