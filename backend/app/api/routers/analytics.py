@@ -13,6 +13,9 @@ async def get_dashboard_stats(
     year: int = Query(default=None, description="Год для статистики"),
     db: AsyncSession = Depends(get_db)
 ):
+    """
+    Статистика для дашборда
+    """
     if year is None:
         year = datetime.now().year
     
@@ -31,9 +34,11 @@ async def get_dashboard_stats(
     if forecast_total > 0:
         execution = (fact_total / forecast_total) * 100
 
+    # Количество организаций
     org_count_res = await db.execute(select(func.count(Organization.id)))
     org_count = org_count_res.scalar() or 0
 
+    # Качество данных (сколько организаций сдали отчеты за год)
     reports_count_res = await db.execute(
         select(func.count(func.distinct(InvestmentReport.organization_id)))
         .where(InvestmentReport.year == year)
@@ -56,6 +61,9 @@ async def get_map_data(
     year: int = Query(default=None),
     db: AsyncSession = Depends(get_db)
 ):
+    """
+    Данные для раскраски карты районов.
+    """
     if year is None:
         year = datetime.now().year
         
@@ -77,8 +85,6 @@ async def get_district_stats(
     db: AsyncSession = Depends(get_db)
 ):
     """Статистика по конкретному району"""
-    from sqlalchemy.orm import selectinload
-    
     # Находим район
     district_res = await db.execute(
         select(District).where(District.name == district_name)
@@ -136,6 +142,12 @@ async def get_district_stats(
 
 @router.get("/trends")
 async def get_analytics_trends(db: AsyncSession = Depends(get_db)):
+    """
+    1. История (динамика по годам).
+    2. Топ-3 Района за ВСЕ время.
+    3. Прогноз.
+    """
+    
     # 1. ИСТОРИЯ - все годы
     hist_stmt = select(
         InvestmentReport.year,
@@ -145,7 +157,7 @@ async def get_analytics_trends(db: AsyncSession = Depends(get_db)):
     hist_res = await db.execute(hist_stmt)
     history = [{"year": row[0], "amount": row[1] or 0} for row in hist_res.all()]
 
-    # 2. РЕЙТИНГ ТОП-3 ЗА ВСЕ ВРЕМЯ (не только 2025!)
+    # 2. РЕЙТИНГ ТОП-3 ЗА ВСЕ ВРЕМЯ
     top_stmt = select(
         District.name,
         func.sum(InvestmentReport.fact_annual).label("total")
@@ -158,7 +170,7 @@ async def get_analytics_trends(db: AsyncSession = Depends(get_db)):
     top_res = await db.execute(top_stmt)
     rating = [{"name": row[0], "value": row[1] or 0} for row in top_res.all()]
 
-    # 3. ПРОГНОЗ - берем forecast_annual и строим линию
+    # 3. ПРОГНОЗ - все годы
     forecast_stmt = select(
         InvestmentReport.year,
         func.sum(InvestmentReport.forecast_annual).label("forecast")
