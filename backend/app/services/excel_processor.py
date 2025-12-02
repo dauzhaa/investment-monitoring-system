@@ -3,96 +3,87 @@ import io
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from app.models import Organization, District, Okved, InvestmentReport
+from app.models import Organization, District, InvestmentReport
 from app.models.investment_report import ReportStatus
 
 logger = logging.getLogger(__name__)
 
-def clean_float(val):
-    if pd.isna(val) or str(val).strip() in ['-', '', 'nan', 'None', '#REF!']: return 0.0
-    try:
-        cleaned = str(val).replace(' ', '').replace(',', '.')
-        return float(cleaned)
-    except:
-        return 0.0
-
 async def process_excel(db: AsyncSession, file_content: bytes, year: int):
     try:
-        # Читаем "как есть" (все в строки), игнорируем ошибки структуры
-        try:
-            # Сначала пробуем CSV с запятой
-            df = pd.read_csv(io.BytesIO(file_content), header=None, dtype=str, on_bad_lines='skip', sep=',')
-            if df.shape[1] < 2:
-                 # Если не вышло, пробуем точку с запятой
-                 df = pd.read_csv(io.BytesIO(file_content), header=None, dtype=str, on_bad_lines='skip', sep=';')
-        except:
-            # Если совсем плохо, пробуем Excel
-            df = pd.read_excel(io.BytesIO(file_content), header=None, dtype=str)
-
+        # Читаем Excel
+        df = pd.read_excel(io.BytesIO(file_content), dtype=str)
+        
+        # Очищаем названия колонок от лишних пробелов
+        df.columns = df.columns.str.strip()
+        
         processed_count = 0
         
+        # Получаем все районы из базы в словарь для быстрого поиска { "имя": id }
+        districts_res = await db.execute(select(District))
+        districts_map = {d.name.lower().strip(): d.id for d in districts_res.scalars().all()}
+
         for index, row in df.iterrows():
             try:
-                raw_str = str(row.values)
-                # Пропускаем мусорные строки
-                if "source:" in raw_str or "Наименование" in raw_str:
+                # 1. Считываем данные по колонкам (Судя по вашему CSV)
+                # Колонка 0: Наименование
+                # Колонка 1: Район
+                # Колонка 3: ИНН
+                
+                name = str(row.iloc[0]).strip()
+                district_name = str(row.iloc[1]).strip()
+                inn = str(row.iloc[3]).strip().replace('.0', '') # ИНН в 4-й колонке (индекс 3)
+                email_raw = str(row.iloc[6]).strip() if len(row) > 6 else None # Email примерно в 7 колонке
+
+                # Проверка валидности ИНН
+                if not inn.isdigit() or len(inn) not in [10, 12]:
                     continue
 
-                inn = None
-                name = None
-                email = None
+                # 2. Ищем ID района
+                district_id = districts_map.get(district_name.lower())
                 
-                # Ищем ИНН перебором ячеек (он может быть во 2-й или 3-й колонке)
-                for i in range(len(row)):
-                    val = str(row.iloc[i]).strip().replace('.0', '')
-                    # ИНН юрлица 10 цифр, ИП 12 цифр
-                    if val.isdigit() and len(val) in [10, 12]:
-                        inn = val
-                        # Имя обычно перед ИНН
-                        if i > 0: name = str(row.iloc[i-1]).strip()
-                        # Почта обычно после
-                        if i + 1 < len(row): 
-                            email_raw = str(row.iloc[i+1]).strip()
-                            if '@' in email_raw:
-                                email = email_raw.split(';')[0].split(',')[0].strip()
-                        break
-                
-                # Если перебор не сработал, берем жестко по твоей структуре (col 1=Name, col 2=INN)
-                if not inn:
-                    possible_inn = str(row.iloc[2]).strip().replace('.0', '')
-                    if possible_inn.isdigit() and len(possible_inn) in [10, 12]:
-                        inn = possible_inn
-                        name = str(row.iloc[1]).strip()
-                
-                if not inn or not name:
-                    continue
-
-                # 1. Создаем/Обновляем Организацию
-                res = await db.execute(select(Organization).where(Organization.inn == inn))
+                # 3. Обработка Организации
+                # Проверяем, есть ли такая организация
+                stmt = select(Organization).where(Organization.inn == inn)
+                res = await db.execute(stmt)
                 org = res.scalar_one_or_none()
                 
                 if not org:
-                    org = Organization(name=name, inn=inn, contact_email=email)
+                    # Создаем новую
+                    org = Organization(
+                        name=name, 
+                        inn=inn, 
+                        district_id=district_id,
+                        contact_email=email_raw if email_raw and '@' in email_raw else None
+                    )
                     db.add(org)
                     await db.commit()
                     await db.refresh(org)
                 else:
-                    if email and not org.contact_email:
-                        org.contact_email = email
+                    # Обновляем район, если его не было
+                    updated = False
+                    if district_id and org.district_id != district_id:
+                        org.district_id = district_id
+                        updated = True
+                    if email_raw and '@' in email_raw and not org.contact_email:
+                        org.contact_email = email_raw
+                        updated = True
+                    
+                    if updated:
                         db.add(org)
                         await db.commit()
 
-                # 2. Создаем пустой отчет (чтобы организация появилась в мониторинге как "Не сдан")
-                res_rep = await db.execute(select(InvestmentReport).where(
+                # 4. Создаем отчет (статус "Не сдан", так как это только план/список)
+                rep_stmt = select(InvestmentReport).where(
                     and_(InvestmentReport.organization_id == org.id, InvestmentReport.year == year)
-                ))
+                )
+                res_rep = await db.execute(rep_stmt)
                 report = res_rep.scalar_one_or_none()
 
                 if not report:
                     report = InvestmentReport(
                         organization_id=org.id, 
                         year=year, 
-                        status=ReportStatus.OVERDUE.value
+                        status=ReportStatus.OVERDUE.value # По умолчанию просрочен
                     )
                     db.add(report)
                     await db.commit()
@@ -100,9 +91,10 @@ async def process_excel(db: AsyncSession, file_content: bytes, year: int):
                 processed_count += 1
 
             except Exception as e:
+                logger.warning(f"Ошибка в строке {index}: {e}")
                 continue
 
         return {"status": "success", "processed": processed_count}
     except Exception as e:
-        logger.error(f"File processing error: {e}")
+        logger.error(f"Global processing error: {e}")
         return {"status": "error", "detail": str(e)}

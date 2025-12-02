@@ -33,5 +33,6 @@ docker/redis/data/
 uploads/
 logs/
 *.xlsx
+!backend/app/initial_data/*.xlsx
 *.xls
 !templates/*.xlsx
