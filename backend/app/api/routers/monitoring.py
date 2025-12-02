@@ -3,13 +3,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from datetime import datetime
 from io import BytesIO
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 from app.core.database import get_db
-from app.models import Organization, InvestmentReport
+from app.models import Organization, InvestmentReport, District
 from app.models.investment_report import ReportStatus
 
 router = APIRouter()
@@ -23,9 +24,15 @@ async def get_monitoring_status(
     if year is None:
         year = datetime.now().year
     
-    orgs_res = await db.execute(select(Organization).order_by(Organization.name))
+    # Загружаем организации с районами
+    orgs_res = await db.execute(
+        select(Organization)
+        .options(selectinload(Organization.district))
+        .order_by(Organization.name)
+    )
     all_orgs = orgs_res.scalars().all()
     
+    # Получаем отчеты за выбранный год
     reports_res = await db.execute(
         select(InvestmentReport).where(InvestmentReport.year == year)
     )
@@ -37,8 +44,12 @@ async def get_monitoring_status(
     for org in all_orgs:
         report = reports_by_org.get(org.id)
         
+        # Название района через связь
+        district_name = org.district.name if org.district else None
+        
         if report:
             status = report.status
+            # Проверяем наличие данных за квартал если указан
             if quarter:
                 quarter_fact = getattr(report, f'fact_q{quarter}', 0) or 0
                 status = ReportStatus.SUBMITTED.value if quarter_fact > 0 else ReportStatus.OVERDUE.value
@@ -54,7 +65,7 @@ async def get_monitoring_status(
             "id": org.id,
             "name": org.name,
             "inn": org.inn,
-            "municipality": org.municipality,
+            "municipality": district_name,  # Берем из связи district
             "email": org.contact_email,
             "status": status,
             "upload_date": upload_date
@@ -74,7 +85,11 @@ async def export_monitoring_report(
     if year is None:
         year = datetime.now().year
     
-    orgs_res = await db.execute(select(Organization).order_by(Organization.name))
+    orgs_res = await db.execute(
+        select(Organization)
+        .options(selectinload(Organization.district))
+        .order_by(Organization.name)
+    )
     all_orgs = orgs_res.scalars().all()
     
     reports_res = await db.execute(
@@ -86,7 +101,7 @@ async def export_monitoring_report(
     ws = wb.active
     ws.title = f"Мониторинг {year}"
     
-    headers = ["№", "Организация", "ИНН", "Район", "Прогноз", "Факт", "Статус"]
+    headers = ["№", "Организация", "ИНН", "Район", "Прогноз (млн ₽)", "Факт (млн ₽)", "Статус"]
     ws.append(headers)
     
     header_font = Font(bold=True, color="FFFFFF")
@@ -103,6 +118,8 @@ async def export_monitoring_report(
 
     for idx, org in enumerate(all_orgs, 1):
         report = reports_by_org.get(org.id)
+        district_name = org.district.name if org.district else "-"
+        
         if report:
             forecast = report.forecast_annual or 0
             fact = getattr(report, f'fact_q{quarter}', 0) if quarter > 0 else report.fact_annual or 0
@@ -111,7 +128,11 @@ async def export_monitoring_report(
             forecast, fact = 0, 0
             status = ReportStatus.OVERDUE.value
         
-        ws.append([idx, org.name, org.inn, org.municipality or "-", forecast, fact, status])
+        # В миллионах
+        forecast_mln = round(forecast / 1000000, 2) if forecast >= 1000000 else forecast
+        fact_mln = round(fact / 1000000, 2) if fact >= 1000000 else fact
+        
+        ws.append([idx, org.name, org.inn, district_name, forecast_mln, fact_mln, status])
         
         for col in range(1, 8):
             cell = ws.cell(row=ws.max_row, column=col)
@@ -123,7 +144,7 @@ async def export_monitoring_report(
         else:
             status_cell.font = Font(color="2E7D32", bold=True)
 
-    for i, w in enumerate([5, 50, 15, 20, 15, 15, 15], 1):
+    for i, w in enumerate([5, 50, 15, 25, 15, 15, 15], 1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
 
     output = BytesIO()

@@ -40,9 +40,7 @@ async def get_dashboard_stats(
     )
     reports_count = reports_count_res.scalar() or 0
     
-    data_quality = 0
-    if org_count > 0:
-        data_quality = round((reports_count / org_count) * 100, 1)
+    data_quality = round((reports_count / org_count) * 100, 1) if org_count > 0 else 0
 
     return {
         "currentYearTotal": forecast_total,
@@ -55,7 +53,7 @@ async def get_dashboard_stats(
 
 @router.get("/map")
 async def get_map_data(
-    year: int = Query(default=None, description="Год для карты"),
+    year: int = Query(default=None),
     db: AsyncSession = Depends(get_db)
 ):
     if year is None:
@@ -73,10 +71,63 @@ async def get_map_data(
     data = [{"name": row[0], "value": row[1] or 0} for row in res.all()]
     return data
 
+@router.get("/district/{district_name}")
+async def get_district_stats(
+    district_name: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Статистика по конкретному району"""
+    # Находим район
+    district_res = await db.execute(
+        select(District).where(District.name == district_name)
+    )
+    district = district_res.scalar_one_or_none()
+    
+    if not district:
+        return {"error": "Район не найден"}
+    
+    # Количество организаций
+    org_count_res = await db.execute(
+        select(func.count(Organization.id))
+        .where(Organization.district_id == district.id)
+    )
+    org_count = org_count_res.scalar() or 0
+    
+    # Сумма инвестиций за все годы
+    total_res = await db.execute(
+        select(
+            func.sum(InvestmentReport.fact_annual),
+            func.sum(InvestmentReport.forecast_annual)
+        )
+        .join(Organization, InvestmentReport.organization_id == Organization.id)
+        .where(Organization.district_id == district.id)
+    )
+    totals = total_res.one()
+    
+    # Инвестиции по годам
+    by_year_res = await db.execute(
+        select(
+            InvestmentReport.year,
+            func.sum(InvestmentReport.fact_annual)
+        )
+        .join(Organization, InvestmentReport.organization_id == Organization.id)
+        .where(Organization.district_id == district.id)
+        .group_by(InvestmentReport.year)
+        .order_by(InvestmentReport.year)
+    )
+    by_year = [{"year": r[0], "amount": r[1] or 0} for r in by_year_res.all()]
+    
+    return {
+        "name": district_name,
+        "organizationCount": org_count,
+        "totalFact": totals[0] or 0,
+        "totalForecast": totals[1] or 0,
+        "byYear": by_year
+    }
+
 @router.get("/trends")
 async def get_analytics_trends(db: AsyncSession = Depends(get_db)):
-    current_year = datetime.now().year
-    
+    # 1. ИСТОРИЯ - все годы
     hist_stmt = select(
         InvestmentReport.year,
         func.sum(InvestmentReport.fact_annual)
@@ -85,12 +136,12 @@ async def get_analytics_trends(db: AsyncSession = Depends(get_db)):
     hist_res = await db.execute(hist_stmt)
     history = [{"year": row[0], "amount": row[1] or 0} for row in hist_res.all()]
 
+    # 2. РЕЙТИНГ ТОП-3 ЗА ВСЕ ВРЕМЯ (не только 2025!)
     top_stmt = select(
         District.name,
         func.sum(InvestmentReport.fact_annual).label("total")
     ).join(Organization, Organization.district_id == District.id)\
      .join(InvestmentReport, InvestmentReport.organization_id == Organization.id)\
-     .where(InvestmentReport.year == current_year)\
      .group_by(District.name)\
      .order_by(desc("total"))\
      .limit(3)
@@ -98,11 +149,11 @@ async def get_analytics_trends(db: AsyncSession = Depends(get_db)):
     top_res = await db.execute(top_stmt)
     rating = [{"name": row[0], "value": row[1] or 0} for row in top_res.all()]
 
+    # 3. ПРОГНОЗ - берем forecast_annual и строим линию
     forecast_stmt = select(
         InvestmentReport.year,
         func.sum(InvestmentReport.forecast_annual).label("forecast")
-    ).where(InvestmentReport.year >= current_year)\
-     .group_by(InvestmentReport.year)\
+    ).group_by(InvestmentReport.year)\
      .order_by(InvestmentReport.year)
     
     forecast_res = await db.execute(forecast_stmt)
