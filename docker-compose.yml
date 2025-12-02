@@ -42,8 +42,7 @@ services:
   backend:
     build: ./backend
     container_name: investment_backend
-    command: sh -c "alembic upgrade head && python -m app.utils.seed_data && uvicorn app.main:app --host 0.0.0.0 --port 8000"
-    ports:
+    command: sh -c "alembic revision --autogenerate -m 'auto_migration' || true && alembic upgrade head && python -m app.utils.seed_data && uvicorn app.main:app --host 0.0.0.0 --port 8000"
       - "8000:8000"
     env_file:
       - .env

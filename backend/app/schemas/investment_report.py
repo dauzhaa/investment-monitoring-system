@@ -1,7 +1,7 @@
-from pydantic import BaseModel, ConfigDict
-from app.models.investment_report import ReportStatus
+from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
+
 class ReportBase(BaseModel):
     report_year: int
     
@@ -11,10 +11,10 @@ class ReportCreate(ReportBase):
 class Report(ReportBase):
     id: int
     organization_id: int
-    status: ReportStatus
+    status: Literal["Просрочен", "Сдан"]
     created_at: datetime
     
     model_config = ConfigDict(from_attributes=True)
     
 class ReportUpdate(BaseModel):
-    status: ReportStatus
+    status: Literal["Просрочен", "Сдан"]

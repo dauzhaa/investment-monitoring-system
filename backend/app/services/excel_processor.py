@@ -4,6 +4,7 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models import Organization, District, Okved, InvestmentReport
+from app.models.investment_report import ReportStatus
 
 logger = logging.getLogger(__name__)
 
@@ -125,9 +126,9 @@ async def process_excel(db: AsyncSession, file_content: bytes, year: int):
 
                 # Статус
                 if report.fact_annual > 0 or report.fact_q1 > 0:
-                    report.status = "Сдан"
+                    report.status = ReportStatus.SUBMITTED.value
                 else:
-                    report.status = "Не сдан"
+                    report.status = ReportStatus.OVERDUE.value
 
                 await db.commit()
                 processed_count += 1
