@@ -1,9 +1,10 @@
 import asyncio
 import logging
 import os
+import json
 from sqlalchemy import select
 from app.core.database import async_session_factory
-from app.models import User
+from app.models import User, District # <--- Добавили District
 from app.core.config import settings
 from app.core.security import hash_password as get_password_hash
 from app.services.excel_processor import process_excel
@@ -11,11 +12,34 @@ from app.services.excel_processor import process_excel
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+async def seed_districts(session):
+    """Заполняет таблицу районов из GeoJSON или жесткого списка"""
+    districts_list = [
+        "Абатский район", "Армизонский район", "Аромашевский район", 
+        "Бердюжский район", "Вагайский район", "Викуловский район", 
+        "Голышмановский район", "Заводоуковский район", "Заводоуковск", # Часто бывает отдельно
+        "Исетский район", "Ишим", "Ишимский район", 
+        "Казанский район", "Нижнетавдинский район", "Омутинский район", 
+        "Сладковский район", "Сорокинский район", "Тобольск", 
+        "Тобольский район", "Тюменский район", "Тюмень", 
+        "Уватский район", "Упоровский район", "Юргинский район", 
+        "Ялуторовский район", "Ялуторовск", "Ярковский район"
+    ]
+    
+    logger.info("🗺 Проверка справочника районов...")
+    for dist_name in districts_list:
+        stmt = select(District).where(District.name == dist_name)
+        result = await session.execute(stmt)
+        existing = result.scalar_one_or_none()
+        
+        if not existing:
+            new_dist = District(name=dist_name)
+            session.add(new_dist)
+            logger.info(f"➕ Добавлен район: {dist_name}")
+    
+    await session.commit()
+
 async def seed_data():
-    """
-    1. Создает администратора.
-    2. Автоматически загружает CSV/Excel файлы из папки app/initial_data
-    """
     logger.info("🌱 Начало инициализации данных...")
 
     async with async_session_factory() as session:
@@ -28,18 +52,17 @@ async def seed_data():
             user = User(
                 email=settings.FIRST_SUPERUSER,
                 hashed_password=get_password_hash(settings.FIRST_SUPERUSER_PASSWORD),
-                # Убрали full_name и role, так как их нет в модели
                 is_active=True,
                 is_superuser=True
             )
             session.add(user)
             await session.commit()
             logger.info("✅ Администратор создан.")
-        else:
-            logger.info("👌 Администратор уже существует.")
+        
+        # 2. РАЙОНЫ (НОВОЕ)
+        await seed_districts(session)
 
-        # 2. АВТОЗАГРУЗКА ФАЙЛОВ
-        # Путь к папке: /app/app/initial_data (внутри контейнера)
+        # 3. АВТОЗАГРУЗКА ФАЙЛОВ
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         data_dir = os.path.join(base_dir, "initial_data")
         

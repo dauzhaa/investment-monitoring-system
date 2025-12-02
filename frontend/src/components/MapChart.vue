@@ -82,7 +82,7 @@ function updateChart() {
         },
         // Указываем, какое поле из GeoJSON использовать как имя
         // В предоставленном tyumen_districts.json имя района лежит в NAME_2
-        nameProperty: 'NAME_2',
+        nameProperty: 'NL_NAME_2',
         data: props.mapData
       }
     ]
