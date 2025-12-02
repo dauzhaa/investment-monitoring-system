@@ -5,7 +5,7 @@ from sqlalchemy import select
 from app.core.database import async_session_factory
 from app.models import User
 from app.core.config import settings
-from app.core.security import get_password_hash
+from app.core.security import hash_password as get_password_hash
 from app.services.excel_processor import process_excel
 
 logging.basicConfig(level=logging.INFO)
