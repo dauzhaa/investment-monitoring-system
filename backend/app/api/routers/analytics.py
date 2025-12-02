@@ -1,111 +1,90 @@
 # backend/app/api/routers/analytics.py
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc
+from datetime import datetime
 from app.core.database import get_db
 from app.models import Organization, InvestmentReport, District
 
 router = APIRouter()
 
 @router.get("/stats")
-async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
-    """
-    Статистика для дашборда:
-    1. Объем инвестиций (План и Факт) на текущий год
-    2. Освоение бюджета (Факт / План * 100)
-    3. Количество организаций
-    4. Качество данных (процент заполненности отчетов)
-    """
-    current_year = 2025
+async def get_dashboard_stats(
+    year: int = Query(default=None, description="Год для статистики"),
+    db: AsyncSession = Depends(get_db)
+):
+    if year is None:
+        year = datetime.now().year
     
-    # 1. Инвестиции (прогноз и факт)
-    investment_stmt = select(
+    stmt = select(
         func.sum(InvestmentReport.forecast_annual),
         func.sum(InvestmentReport.fact_annual)
-    ).where(InvestmentReport.year == current_year)
+    ).where(InvestmentReport.year == year)
     
-    investment_res = await db.execute(investment_stmt)
-    investment_row = investment_res.one()
+    res = await db.execute(stmt)
+    row = res.one()
     
-    forecast_total = investment_row[0] or 0
-    fact_total = investment_row[1] or 0
+    forecast_total = row[0] or 0
+    fact_total = row[1] or 0
     
     execution = 0
     if forecast_total > 0:
         execution = (fact_total / forecast_total) * 100
 
-    # 2. Количество организаций
-    org_count_stmt = select(func.count(Organization.id))
-    org_count_res = await db.execute(org_count_stmt)
-    organizations_count = org_count_res.scalar() or 0
+    org_count_res = await db.execute(select(func.count(Organization.id)))
+    org_count = org_count_res.scalar() or 0
 
-    # 3. Качество данных (процент заполненности отчетов за текущий год)
-    total_reports_stmt = select(func.count(InvestmentReport.id)).where(
-        InvestmentReport.year == current_year
+    reports_count_res = await db.execute(
+        select(func.count(func.distinct(InvestmentReport.organization_id)))
+        .where(InvestmentReport.year == year)
     )
-    total_reports_res = await db.execute(total_reports_stmt)
-    total_reports = total_reports_res.scalar() or 0
-    
-    filled_reports_stmt = select(func.count(InvestmentReport.id)).where(
-        InvestmentReport.year == current_year,
-        InvestmentReport.fact_annual > 0
-    )
-    filled_reports_res = await db.execute(filled_reports_stmt)
-    filled_reports = filled_reports_res.scalar() or 0
+    reports_count = reports_count_res.scalar() or 0
     
     data_quality = 0
-    if total_reports > 0:
-        data_quality = (filled_reports / total_reports) * 100
+    if org_count > 0:
+        data_quality = round((reports_count / org_count) * 100, 1)
 
     return {
         "currentYearTotal": forecast_total,
         "factTotal": fact_total,
         "forecastTotal": forecast_total,
         "budgetExecution": round(execution, 1),
-        "organizationsCount": organizations_count,
-        "dataQuality": round(data_quality, 1)
+        "organizationCount": org_count,
+        "dataQuality": data_quality
     }
 
 @router.get("/map")
-async def get_map_data(db: AsyncSession = Depends(get_db)):
-    """
-    Данные для раскраски карты районов (сумма инвестиций по районам за текущий год).
-    """
-    current_year = 2025
-    
+async def get_map_data(
+    year: int = Query(default=None, description="Год для карты"),
+    db: AsyncSession = Depends(get_db)
+):
+    if year is None:
+        year = datetime.now().year
+        
     stmt = select(
         District.name,
         func.sum(InvestmentReport.fact_annual)
     ).join(Organization, Organization.district_id == District.id)\
      .join(InvestmentReport, InvestmentReport.organization_id == Organization.id)\
-     .where(InvestmentReport.year == current_year)\
+     .where(InvestmentReport.year == year)\
      .group_by(District.name)
 
     res = await db.execute(stmt)
-    data = [{"name": row[0], "value": round(row[1] or 0, 2)} for row in res.all()]
+    data = [{"name": row[0], "value": row[1] or 0} for row in res.all()]
     return data
 
 @router.get("/trends")
 async def get_analytics_trends(db: AsyncSession = Depends(get_db)):
-    """
-    1. История (динамика по годам 2022-2025)
-    2. Топ-3 Района
-    3. Прогноз (используем forecast_annual из investment_reports)
-    """
+    current_year = datetime.now().year
     
-    # 1. ИСТОРИЯ (2022-2025)
     hist_stmt = select(
         InvestmentReport.year,
         func.sum(InvestmentReport.fact_annual)
-    ).where(
-        InvestmentReport.year.in_([2022, 2023, 2024, 2025])
     ).group_by(InvestmentReport.year).order_by(InvestmentReport.year)
     
     hist_res = await db.execute(hist_stmt)
-    history = [{"year": row[0], "amount": round(row[1] or 0, 2)} for row in hist_res.all()]
+    history = [{"year": row[0], "amount": row[1] or 0} for row in hist_res.all()]
 
-    # 2. РЕЙТИНГ ТОП-3 районов за текущий год
-    current_year = 2025
     top_stmt = select(
         District.name,
         func.sum(InvestmentReport.fact_annual).label("total")
@@ -117,9 +96,8 @@ async def get_analytics_trends(db: AsyncSession = Depends(get_db)):
      .limit(3)
     
     top_res = await db.execute(top_stmt)
-    rating = [{"name": row[0], "value": round(row[1] or 0, 2)} for row in top_res.all()]
+    rating = [{"name": row[0], "value": row[1] or 0} for row in top_res.all()]
 
-    # 3. ПРОГНОЗ (из forecast_annual в investment_reports)
     forecast_stmt = select(
         InvestmentReport.year,
         func.sum(InvestmentReport.forecast_annual).label("forecast")
@@ -128,7 +106,7 @@ async def get_analytics_trends(db: AsyncSession = Depends(get_db)):
      .order_by(InvestmentReport.year)
     
     forecast_res = await db.execute(forecast_stmt)
-    forecast_data = [{"year": row[0], "amount": round(row[1] or 0, 2)} for row in forecast_res.all()]
+    forecast_data = [{"year": row[0], "amount": row[1] or 0} for row in forecast_res.all()]
 
     return {
         "history": history,
@@ -138,5 +116,4 @@ async def get_analytics_trends(db: AsyncSession = Depends(get_db)):
 
 @router.post("/calculate/clustering")
 async def calculate_clusters():
-    """Заглушка для кластеризации"""
     return {"status": "success", "message": "Clustering updated"}

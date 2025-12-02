@@ -1,21 +1,37 @@
+// frontend/src/services/api.js
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'http://77.95.201.98/api/v1',
-  withCredentials: true,
+  baseURL: import.meta.env.VITE_API_URL || '/api/v1',
+  timeout: 30000,
+  headers: {
+    'Content-Type': 'application/json'
+  }
 });
 
-
+// Интерсептор для добавления токена авторизации
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
-
     if (token) {
-      config.headers['Authorization'] = `Bearer ${token}`;
+      config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
   (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Интерсептор для обработки ошибок
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token');
+      window.location.href = '/login';
+    }
+    console.error('API Error:', error.response?.data || error.message);
     return Promise.reject(error);
   }
 );
