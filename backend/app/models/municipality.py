@@ -6,7 +6,7 @@ from app.models.base import Base
 
 if TYPE_CHECKING:
     from .organization import Organization
-    from .directory_district import DirectoryDistrict
+    from .dictionaries import District  # ← ВОТ ТАК!
 
 class Municipality(Base):
     __tablename__ = 'municipalities'
@@ -19,5 +19,5 @@ class Municipality(Base):
     )
     
     # Связи
-    district: Mapped["DirectoryDistrict"] = relationship()
+    district: Mapped["District"] = relationship()  # ← District!
     organizations: Mapped[list["Organization"]] = relationship(back_populates="municipality_ref")

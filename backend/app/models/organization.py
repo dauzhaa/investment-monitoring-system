@@ -1,14 +1,13 @@
 # backend/app/models/organization.py
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from sqlalchemy import String, Boolean, Integer, ForeignKey, JSON
+from sqlalchemy import String, Boolean, Integer, ForeignKey
 from typing import TYPE_CHECKING
 from app.models.base import Base
 
 if TYPE_CHECKING:
     from .user import User
     from .investment_report import InvestmentReport
-    from .directory_district import DirectoryDistrict
-    from .directory_okved import DirectoryOkved
+    from .dictionaries import District, Okved  # ← ВОТ ТАК!
     from .organization_type import OrganizationType
     from .municipality import Municipality
 
@@ -36,12 +35,10 @@ class Organization(Base):
     
     # Простые поля
     is_smp: Mapped[bool] = mapped_column(Boolean, default=False)
-    # coordinates: JSON УДАЛИМ! (см. пункт 2)
-    # cluster_group: УДАЛИМ! (см. пункт 3)
     
     # Связи (relationships)
-    district: Mapped["DirectoryDistrict"] = relationship()
-    okved: Mapped["DirectoryOkved"] = relationship()
+    district: Mapped["District"] = relationship()  # ← District, не DirectoryDistrict!
+    okved: Mapped["Okved"] = relationship()  # ← Okved, не DirectoryOkved!
     org_type_ref: Mapped["OrganizationType"] = relationship(back_populates="organizations")
     municipality_ref: Mapped["Municipality"] = relationship(back_populates="organizations")
     
