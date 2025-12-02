@@ -7,9 +7,8 @@ from app.models.base import Base
 if TYPE_CHECKING:
     from .user import User
     from .investment_report import InvestmentReport
-    from .dictionaries import District, Okved  # ← ВОТ ТАК!
+    from .dictionaries import District, Okved
     from .organization_type import OrganizationType
-    from .municipality import Municipality
 
 class Organization(Base):
     __tablename__ = 'organizations'
@@ -29,18 +28,15 @@ class Organization(Base):
     org_type_id: Mapped[int | None] = mapped_column(
         ForeignKey("organization_types.id", ondelete="SET NULL")
     )
-    municipality_id: Mapped[int | None] = mapped_column(
-        ForeignKey("municipalities.id", ondelete="SET NULL")
-    )
+    # municipality_id УДАЛЕНО! ❌
     
     # Простые поля
     is_smp: Mapped[bool] = mapped_column(Boolean, default=False)
     
     # Связи (relationships)
-    district: Mapped["District"] = relationship()  # ← District, не DirectoryDistrict!
-    okved: Mapped["Okved"] = relationship()  # ← Okved, не DirectoryOkved!
+    district: Mapped["District"] = relationship()
+    okved: Mapped["Okved"] = relationship()
     org_type_ref: Mapped["OrganizationType"] = relationship(back_populates="organizations")
-    municipality_ref: Mapped["Municipality"] = relationship(back_populates="organizations")
     
     users: Mapped[list["User"]] = relationship(back_populates="organization")
     reports: Mapped[list["InvestmentReport"]] = relationship(back_populates="organization")

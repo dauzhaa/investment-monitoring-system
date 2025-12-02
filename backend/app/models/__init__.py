@@ -5,7 +5,6 @@ from .user import User
 from .investment_report import InvestmentReport
 from .notification import Notification
 from .organization_type import OrganizationType  # НОВОЕ
-from .municipality import Municipality  # НОВОЕ
 
 __all__ = [
     "Base",
@@ -14,5 +13,4 @@ __all__ = [
     "InvestmentReport",
     "Notification",
     "OrganizationType",
-    "Municipality",
 ]
