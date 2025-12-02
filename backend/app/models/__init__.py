@@ -4,7 +4,8 @@ from .dictionaries import District, Okved
 from .user import User
 from .investment_report import InvestmentReport
 from .notification import Notification
-from .forecast import Forecast
+from .organization_type import OrganizationType  # НОВОЕ
+from .municipality import Municipality  # НОВОЕ
 
 __all__ = [
     "Base",
@@ -12,5 +13,6 @@ __all__ = [
     "User",
     "InvestmentReport",
     "Notification",
-    "Forecast"
+    "OrganizationType",
+    "Municipality",
 ]

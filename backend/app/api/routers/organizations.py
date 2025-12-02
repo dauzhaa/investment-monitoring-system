@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from app.core.database import get_db
-from app.models import Organization, InvestmentReport, Forecast
+from app.models import Organization, InvestmentReport
 from fastapi.responses import StreamingResponse
 from io import BytesIO
 import openpyxl
@@ -62,13 +62,13 @@ async def get_organization_details(org_id: int, db: AsyncSession = Depends(get_d
     )
     reports = reports_res.scalars().all()
 
-    # 3. Прогноз AI (из таблицы Forecast)
-    forecast_res = await db.execute(
-        select(Forecast)
-        .where(Forecast.organization_id == org_id)
-        .order_by(Forecast.forecast_date)
-    )
-    forecasts = forecast_res.scalars().all()
+    forecast_data = []
+    for report in reports:
+        if report.forecast_annual > 0:
+            forecast_data.append({
+                "year": report.year,
+                "amount": report.forecast_annual
+            })
 
     return {
         "info": {
@@ -86,14 +86,6 @@ async def get_organization_details(org_id: int, db: AsyncSession = Depends(get_d
                 "source_reg": r.budget_regional
             } for r in reports
         ],
-        "forecast": [
-            {
-                "date": f.forecast_date,
-                "amount": f.predicted_amount,
-                "lower": f.lower_bound,
-                "upper": f.upper_bound
-            } for f in forecasts
-        ]
     }
     
 @router.get("/export/summary")
