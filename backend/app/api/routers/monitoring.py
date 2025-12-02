@@ -1,15 +1,16 @@
-# backend/app/api/routers/monitoring.py
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
-from sqlalchemy.orm import selectinload
+from sqlalchemy import select, and_, or_
+from sqlalchemy.orm import selectinload  # <--- ДОБАВЛЕНО
 from app.core.database import get_db
-from app.models import Organization, InvestmentReport
+# ИСПРАВЛЕНО: OKVED -> Okved
+from app.models import Organization, InvestmentReport, District, Okved 
 from pydantic import BaseModel
 from io import BytesIO
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
+from datetime import datetime
 
 router = APIRouter()
 
@@ -22,21 +23,23 @@ class RemindRequest(BaseModel):
 @router.get("/status")
 async def get_monitoring_status(
     year: int, 
-    quarter: int, 
+    quarter: int,  # 0 = весь год
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Возвращает статус сдачи отчетности.
+    Статус сдачи отчетности.
     """
-    # 1. Получаем все активные организации
     orgs_res = await db.execute(
         select(Organization)
-        .options(selectinload(Organization.district))
+        .options(
+            selectinload(Organization.district),
+            # Если нужно подгружать ОКВЭД, раскомментируй:
+            # selectinload(Organization.okved) 
+        )
         .order_by(Organization.name)
     )
     all_orgs = orgs_res.scalars().all()
     
-    # 2. Получаем отчеты
     reports_stmt = select(InvestmentReport).where(InvestmentReport.year == year)
     reports_res = await db.execute(reports_stmt)
     reports_by_org = {r.organization_id: r for r in reports_res.scalars().all()}
@@ -89,9 +92,6 @@ async def export_quarterly_report(
     quarter: int,
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Выгрузка Excel с накопительным итогом.
-    """
     orgs_res = await db.execute(
         select(Organization)
         .options(selectinload(Organization.district), selectinload(Organization.okved))
@@ -108,15 +108,14 @@ async def export_quarterly_report(
     q_name = "Весь год" if quarter == 0 else f"{quarter} Квартал (Накопительно)"
     ws.title = f"Отчет {year}"
     
-    headers = ["Наименование", "ИНН", "Район", "ОКВЭД", "Почта", f"Сумма ({q_name})", "Статус"]
+    headers = ["Наименование", "ИНН", "Район", "ОКВЭД", "ОКПО", "Почта", f"Сумма ({q_name})", "Статус"]
     ws.append(headers)
     
-    # Стили
-    header_fill = PatternFill("solid", fgColor="4F81BD")
     header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill("solid", fgColor="4F81BD")
     for cell in ws[1]:
-        cell.fill = header_fill
         cell.font = header_font
+        cell.fill = header_fill
     
     for org in all_orgs:
         report = reports.get(org.id)
@@ -129,7 +128,6 @@ async def export_quarterly_report(
             q3 = report.fact_q3 or 0
             q4 = report.fact_q4 or 0
             
-            # Логика накопительного итога
             if quarter == 0:
                 amount = report.fact_annual
                 status = "Сдан" if amount > 0 else "Не сдан"
@@ -141,33 +139,32 @@ async def export_quarterly_report(
                 status = "Сдан" if q2 > 0 else "Не сдан"
             elif quarter == 3:
                 amount = q1 + q2 + q3
-                status = "Сдан" if q3 > 0 else "Не сдан"
+                status = "Сдано" if q3 > 0 else "Не сдано"
             elif quarter == 4:
                 amount = q1 + q2 + q3 + q4
-                status = "Сдан" if q4 > 0 else "Не сдан"
+                status = "Сдано" if q4 > 0 else "Не сдано"
         
         ws.append([
             org.name, 
             org.inn, 
             org.district.name if org.district else "-",
             org.okved.code if org.okved else "-",
+            "", # ОКПО
             org.contact_email or "-",
             amount,
             status
         ])
     
     # Автоширина
-    for column in ws.columns:
-        max_length = 0
-        column = [cell for cell in column]
-        for cell in column:
+    for col in ws.columns:
+        max_len = 0
+        column = col[0].column_letter
+        for cell in col:
             try:
-                if len(str(cell.value)) > max_length:
-                    max_length = len(str(cell.value))
-            except:
-                pass
-        adjusted_width = (max_length + 2)
-        ws.column_dimensions[column[0].column_letter].width = min(adjusted_width, 50)
+                if len(str(cell.value)) > max_len:
+                    max_len = len(str(cell.value))
+            except: pass
+        ws.column_dimensions[column].width = min(max_len + 2, 50)
 
     output = BytesIO()
     wb.save(output)
@@ -181,7 +178,12 @@ async def export_quarterly_report(
     )
 
 @router.get("/export/organization/{org_id}")
-async def export_single_org(org_id: int, year: int, quarter: int, db: AsyncSession = Depends(get_db)):
-    # ... (Оставил старую логику или упростил для краткости ответа)
-    # Тут можно вернуть простой Excel с одной строкой
+async def export_organization_report(
+    org_id: int,
+    year: int,
+    quarter: int,
+    db: AsyncSession = Depends(get_db)
+):
+    # Упрощенная заглушка для скачивания отчета одной организации (использует общую логику для простоты примера)
+    # В реале тут детальный отчет
     return await export_quarterly_report(year, quarter, db)

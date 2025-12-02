@@ -18,15 +18,15 @@ def clean_float(val):
 
 async def process_excel(db: AsyncSession, file_content: bytes, year: int):
     try:
-        # 1. Попытка прочитать как CSV с игнорированием ошибок строк
-        # dtype=str важен, чтобы ИНН не превратился в число с плавающей точкой
+        # Читаем "как есть" (все в строки), игнорируем ошибки структуры
         try:
+            # Сначала пробуем CSV с запятой
             df = pd.read_csv(io.BytesIO(file_content), header=None, dtype=str, on_bad_lines='skip', sep=',')
-            # Если разделитель не сработал (мало колонок), пробуем ;
             if df.shape[1] < 2:
+                 # Если не вышло, пробуем точку с запятой
                  df = pd.read_csv(io.BytesIO(file_content), header=None, dtype=str, on_bad_lines='skip', sep=';')
         except:
-            # Если совсем не CSV, пробуем Excel
+            # Если совсем плохо, пробуем Excel
             df = pd.read_excel(io.BytesIO(file_content), header=None, dtype=str)
 
         processed_count = 0
@@ -34,67 +34,55 @@ async def process_excel(db: AsyncSession, file_content: bytes, year: int):
         for index, row in df.iterrows():
             try:
                 raw_str = str(row.values)
-                # Пропускаем служебные строки из логов или заголовки
+                # Пропускаем мусорные строки
                 if "source:" in raw_str or "Наименование" in raw_str:
                     continue
 
-                # Логика для списка организаций (CSV)
-                # Обычно: 0-№, 1-Имя, 2-ИНН, 3-Почта (в твоем файле ИНН часто в 3й колонке, индекс 2)
-                
-                # Ищем ИНН. Он может быть в 2 или 3 колонке
                 inn = None
                 name = None
                 email = None
                 
-                # Проходим по ячейкам строки и ищем похожий на ИНН
-                for col_idx in range(len(row)):
-                    val = str(row.iloc[col_idx]).strip().replace('.0', '')
+                # Ищем ИНН перебором ячеек (он может быть во 2-й или 3-й колонке)
+                for i in range(len(row)):
+                    val = str(row.iloc[i]).strip().replace('.0', '')
+                    # ИНН юрлица 10 цифр, ИП 12 цифр
                     if val.isdigit() and len(val) in [10, 12]:
                         inn = val
-                        # Обычно имя перед ИНН
-                        if col_idx > 0:
-                            name = str(row.iloc[col_idx-1]).strip()
-                        # А почта после
-                        if col_idx + 1 < len(row):
-                            email_raw = str(row.iloc[col_idx+1]).strip()
+                        # Имя обычно перед ИНН
+                        if i > 0: name = str(row.iloc[i-1]).strip()
+                        # Почта обычно после
+                        if i + 1 < len(row): 
+                            email_raw = str(row.iloc[i+1]).strip()
                             if '@' in email_raw:
                                 email = email_raw.split(';')[0].split(',')[0].strip()
                         break
                 
-                # Если не нашли автоматическим перебором, пробуем жесткие индексы для твоего файла
+                # Если перебор не сработал, берем жестко по твоей структуре (col 1=Name, col 2=INN)
                 if not inn:
                     possible_inn = str(row.iloc[2]).strip().replace('.0', '')
                     if possible_inn.isdigit() and len(possible_inn) in [10, 12]:
                         inn = possible_inn
                         name = str(row.iloc[1]).strip()
-                        email_raw = str(row.iloc[3]).strip()
-                        email = email_raw if '@' in email_raw else None
-
+                
                 if not inn or not name:
                     continue
 
-                # --- Работа с БД ---
-                # 1. Организация
+                # 1. Создаем/Обновляем Организацию
                 res = await db.execute(select(Organization).where(Organization.inn == inn))
                 org = res.scalar_one_or_none()
                 
                 if not org:
-                    org = Organization(
-                        name=name,
-                        inn=inn,
-                        contact_email=email
-                    )
+                    org = Organization(name=name, inn=inn, contact_email=email)
                     db.add(org)
                     await db.commit()
                     await db.refresh(org)
                 else:
-                    # Обновляем email если есть
                     if email and not org.contact_email:
                         org.contact_email = email
                         db.add(org)
                         await db.commit()
 
-                # 2. Отчет (заглушка "Не сдан", если нет)
+                # 2. Создаем пустой отчет (чтобы организация появилась в мониторинге как "Не сдан")
                 res_rep = await db.execute(select(InvestmentReport).where(
                     and_(InvestmentReport.organization_id == org.id, InvestmentReport.year == year)
                 ))
@@ -112,7 +100,6 @@ async def process_excel(db: AsyncSession, file_content: bytes, year: int):
                 processed_count += 1
 
             except Exception as e:
-                # logger.error(f"Row error: {e}")
                 continue
 
         return {"status": "success", "processed": processed_count}
