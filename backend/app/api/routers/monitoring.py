@@ -92,6 +92,17 @@ async def export_quarterly_report(
     quarter: int,
     db: AsyncSession = Depends(get_db)
 ):
+    # Заголовки накопительных периодов
+    period_names = {
+        0: "январь-декабрь (год)",
+        1: "январь-март",
+        2: "январь-июнь",
+        3: "январь-сентябрь",
+        4: "январь-декабрь"
+    }
+    period_str = period_names.get(quarter, "")
+
+    # Загружаем данные
     orgs_res = await db.execute(
         select(Organization)
         .options(selectinload(Organization.district), selectinload(Organization.okved))
@@ -104,67 +115,82 @@ async def export_quarterly_report(
     
     wb = openpyxl.Workbook()
     ws = wb.active
-    
-    q_name = "Весь год" if quarter == 0 else f"{quarter} Квартал (Накопительно)"
     ws.title = f"Отчет {year}"
     
-    headers = ["Наименование", "ИНН", "Район", "ОКВЭД", "ОКПО", "Почта", f"Сумма ({q_name})", "Статус"]
+    # Формируем шапку как в initial data
+    headers = [
+        "Наименование организации",
+        "ИНН",
+        "Район",
+        "ОКВЭД",
+        "ОКПО", # Оставляем пустым или берем если есть
+        "Почта",
+        f"Инвестиции за {quarter} квартал {period_str} {year} г., тыс. рублей",
+        "Статус"
+    ]
     ws.append(headers)
     
+    # Стили шапки
     header_font = Font(bold=True, color="FFFFFF")
     header_fill = PatternFill("solid", fgColor="4F81BD")
+    thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+
     for cell in ws[1]:
         cell.font = header_font
         cell.fill = header_fill
+        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        cell.border = thin_border
     
+    ws.row_dimensions[1].height = 40
+
     for org in all_orgs:
         report = reports.get(org.id)
         amount = 0.0
         status = "Не сдан"
         
         if report:
-            q1 = report.fact_q1 or 0
-            q2 = report.fact_q2 or 0
-            q3 = report.fact_q3 or 0
-            q4 = report.fact_q4 or 0
-            
-            if quarter == 0:
+            # Берем конкретное поле из базы, так как они там уже лежат накопительно (из парсера)
+            if quarter == 0: 
                 amount = report.fact_annual
-                status = "Сдан" if amount > 0 else "Не сдан"
-            elif quarter == 1:
-                amount = q1
-                status = "Сдан" if q1 > 0 else "Не сдан"
-            elif quarter == 2:
-                amount = q1 + q2
-                status = "Сдан" if q2 > 0 else "Не сдан"
-            elif quarter == 3:
-                amount = q1 + q2 + q3
-                status = "Сдано" if q3 > 0 else "Не сдано"
-            elif quarter == 4:
-                amount = q1 + q2 + q3 + q4
-                status = "Сдано" if q4 > 0 else "Не сдано"
+                status = "Сдан" if report.fact_annual > 0 else report.status
+            elif quarter == 1: 
+                amount = report.fact_q1
+                status = "Сдан" if report.fact_q1 > 0 else report.status
+            elif quarter == 2: 
+                amount = report.fact_q2
+                status = "Сдан" if report.fact_q2 > 0 else report.status
+            elif quarter == 3: 
+                amount = report.fact_q3
+                status = "Сдан" if report.fact_q3 > 0 else report.status
+            elif quarter == 4: 
+                amount = report.fact_q4
+                status = "Сдан" if report.fact_q4 > 0 else report.status
         
-        ws.append([
+        row_data = [
             org.name, 
             org.inn, 
             org.district.name if org.district else "-",
             org.okved.code if org.okved else "-",
-            "", # ОКПО
+            "", # ОКПО нет в базе пока
             org.contact_email or "-",
             amount,
             status
-        ])
-    
+        ]
+        ws.append(row_data)
+        
+        # Границы для ячеек
+        for cell in ws[ws.max_row]:
+            cell.border = thin_border
+
     # Автоширина
-    for col in ws.columns:
-        max_len = 0
-        column = col[0].column_letter
-        for cell in col:
-            try:
-                if len(str(cell.value)) > max_len:
-                    max_len = len(str(cell.value))
-            except: pass
-        ws.column_dimensions[column].width = min(max_len + 2, 50)
+    ws.column_dimensions['A'].width = 50
+    ws.column_dimensions['B'].width = 15
+    ws.column_dimensions['C'].width = 25
+    ws.column_dimensions['D'].width = 10
+    ws.column_dimensions['E'].width = 12
+    ws.column_dimensions['F'].width = 25
+    ws.column_dimensions['G'].width = 20
+    ws.column_dimensions['H'].width = 15
 
     output = BytesIO()
     wb.save(output)
