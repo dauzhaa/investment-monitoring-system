@@ -11,11 +11,10 @@ class ReportCreate(ReportBase):
 class Report(ReportBase):
     id: int
     organization_id: int
-    # Добавляем "Не запланировано" в список допустимых значений
     status: Literal["Просрочен", "Сдан", "Не запланировано"] 
-    forecast_annual: float # Добавил для отображения
-    fact_annual: float     # Добавил для отображения
-    comment: str | None = None # Добавил комментарий
+    forecast_annual: float
+    fact_annual: float
+    comment: str | None = None
     created_at: datetime
     
     model_config = ConfigDict(from_attributes=True)

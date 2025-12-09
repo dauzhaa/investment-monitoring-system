@@ -1,181 +1,278 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, and_, or_
 from sqlalchemy.orm import selectinload
 from app.core.database import get_db
-from app.models import Organization, InvestmentReport
-from fastapi.responses import StreamingResponse
+from app.models import Organization, InvestmentReport, District
 from io import BytesIO
+from typing import Optional, List
 import openpyxl
-from openpyxl.styles import Font, PatternFill, Border, Side
+from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
+from datetime import date
 
 router = APIRouter()
 
+
 @router.get("/")
-async def get_organizations(db: AsyncSession = Depends(get_db)):
+async def get_organizations(
+    year: int = Query(default=None),
+    district: Optional[str] = Query(default=None),
+    districts: Optional[str] = Query(default=None),  # comma-separated
+    smp: Optional[bool] = Query(default=None),
+    search: Optional[str] = Query(default=None),
+    db: AsyncSession = Depends(get_db)
+):
     """
-    Список всех организаций
+    Список всех организаций с фильтрацией.
     """
-    # Sum investments
-    subquery = select(
-        InvestmentReport.organization_id,
-        func.sum(InvestmentReport.fact_annual).label("total_money") # Use fact_annual
-    ).group_by(InvestmentReport.organization_id).subquery()
-
-    # Join
-    stmt = select(Organization, subquery.c.total_money)\
-        .outerjoin(subquery, Organization.id == subquery.c.organization_id)\
-        .options(selectinload(Organization.district))\
-        .order_by(Organization.name)
-
+    if year is None:
+        year = date.today().year
+        
+    # Базовый запрос
+    stmt = select(Organization).options(
+        selectinload(Organization.district),
+        selectinload(Organization.okved)
+    )
+    
+    # Фильтр по СМП
+    if smp is not None:
+        stmt = stmt.where(Organization.is_smp == smp)
+    
+    # Фильтр по одному району
+    if district:
+        stmt = stmt.join(District).where(District.name == district)
+    
+    # Фильтр по нескольким районам
+    if districts:
+        district_list = [d.strip() for d in districts.split(',') if d.strip()]
+        if district_list:
+            stmt = stmt.join(District, isouter=True).where(District.name.in_(district_list))
+    
+    # Поиск
+    if search:
+        search_term = f"%{search}%"
+        stmt = stmt.where(
+            or_(
+                Organization.name.ilike(search_term),
+                Organization.inn.ilike(search_term)
+            )
+        )
+    
+    stmt = stmt.order_by(Organization.name)
     res = await db.execute(stmt)
-    orgs = []
-    for row in res.all():
-        org, total = row
-        orgs.append({
+    orgs = res.scalars().all()
+    
+    # Получаем данные об инвестициях
+    org_ids = [org.id for org in orgs]
+    
+    investments_stmt = select(
+        InvestmentReport.organization_id,
+        InvestmentReport.fact_annual,
+        InvestmentReport.forecast_annual,
+        InvestmentReport.status
+    ).where(
+        and_(
+            InvestmentReport.organization_id.in_(org_ids),
+            InvestmentReport.year == year
+        )
+    )
+    
+    inv_res = await db.execute(investments_stmt)
+    investments = {row[0]: {"fact": row[1], "plan": row[2], "status": row[3]} for row in inv_res.all()}
+    
+    result = []
+    for org in orgs:
+        inv_data = investments.get(org.id, {"fact": 0, "plan": 0, "status": None})
+        result.append({
             "id": org.id,
             "name": org.name,
             "inn": org.inn,
-            # Return district name as municipality for frontend compatibility
-            "municipality": org.district.name if org.district else "Не указан",
+            "district": {"name": org.district.name} if org.district else None,
+            "okved": {"code": org.okved.code} if org.okved else None,
             "is_smp": org.is_smp,
-            "total_investment": total if total else 0
+            "contact_email": org.contact_email,
+            "fact_amount": float(inv_data["fact"] or 0),
+            "plan_amount": float(inv_data["plan"] or 0),
+            "status": inv_data["status"]
         })
-    return orgs
+    
+    return result
+
+
+@router.get("/count")
+async def get_organizations_count(db: AsyncSession = Depends(get_db)):
+    """
+    Общее количество организаций.
+    """
+    stmt = select(func.count(Organization.id))
+    res = await db.execute(stmt)
+    count = res.scalar()
+    return {"count": count}
+
+
+@router.get("/export")
+async def export_organizations(
+    year: int = Query(default=None),
+    districts: Optional[str] = Query(default=None),
+    smp: Optional[str] = Query(default=None),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Экспорт организаций в Excel с фильтрацией по районам.
+    """
+    if year is None:
+        year = date.today().year
+    
+    # Базовый запрос
+    stmt = select(Organization).options(
+        selectinload(Organization.district),
+        selectinload(Organization.okved)
+    )
+    
+    # Фильтр по СМП
+    if smp and smp.lower() in ['true', '1']:
+        stmt = stmt.where(Organization.is_smp == True)
+    elif smp and smp.lower() in ['false', '0']:
+        stmt = stmt.where(Organization.is_smp == False)
+    
+    # Фильтр по районам
+    if districts:
+        district_list = [d.strip() for d in districts.split(',') if d.strip()]
+        if district_list:
+            stmt = stmt.join(District, isouter=True).where(District.name.in_(district_list))
+    
+    stmt = stmt.order_by(Organization.name)
+    res = await db.execute(stmt)
+    orgs = res.scalars().all()
+    
+    # Получаем данные об инвестициях
+    org_ids = [org.id for org in orgs]
+    investments_stmt = select(
+        InvestmentReport.organization_id,
+        InvestmentReport.fact_annual,
+        InvestmentReport.forecast_annual
+    ).where(
+        and_(
+            InvestmentReport.organization_id.in_(org_ids),
+            InvestmentReport.year == year
+        )
+    )
+    
+    inv_res = await db.execute(investments_stmt)
+    investments = {row[0]: {"fact": row[1], "plan": row[2]} for row in inv_res.all()}
+    
+    # Создаём Excel
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"Организации {year}"
+    
+    # Заголовок
+    district_names = districts if districts else "Все районы"
+    ws.merge_cells('A1:G1')
+    ws['A1'] = f"Отчёт об инвестициях организаций за {year} год"
+    ws['A1'].font = Font(bold=True, size=14)
+    ws['A1'].alignment = Alignment(horizontal='center')
+    
+    ws.merge_cells('A2:G2')
+    ws['A2'] = f"Районы: {district_names}"
+    ws['A2'].alignment = Alignment(horizontal='center')
+    
+    # Заголовки столбцов
+    headers = ['№', 'Наименование', 'ИНН', 'Район', 'ОКВЭД', 'СМП', 'ФАКТ (тыс. ₽)', 'ПЛАН (тыс. ₽)']
+    header_fill = PatternFill(start_color='1976D2', end_color='1976D2', fill_type='solid')
+    header_font = Font(bold=True, color='FFFFFF')
+    
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=4, column=col, value=header)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center')
+    
+    # Данные
+    for row_num, org in enumerate(orgs, 5):
+        inv_data = investments.get(org.id, {"fact": 0, "plan": 0})
+        ws.cell(row=row_num, column=1, value=row_num - 4)
+        ws.cell(row=row_num, column=2, value=org.name)
+        ws.cell(row=row_num, column=3, value=org.inn)
+        ws.cell(row=row_num, column=4, value=org.district.name if org.district else '')
+        ws.cell(row=row_num, column=5, value=org.okved.code if org.okved else '')
+        ws.cell(row=row_num, column=6, value='Да' if org.is_smp else 'Нет')
+        ws.cell(row=row_num, column=7, value=float(inv_data["fact"] or 0))
+        ws.cell(row=row_num, column=8, value=float(inv_data["plan"] or 0))
+    
+    # Ширина столбцов
+    ws.column_dimensions['A'].width = 5
+    ws.column_dimensions['B'].width = 50
+    ws.column_dimensions['C'].width = 15
+    ws.column_dimensions['D'].width = 25
+    ws.column_dimensions['E'].width = 10
+    ws.column_dimensions['F'].width = 8
+    ws.column_dimensions['G'].width = 15
+    ws.column_dimensions['H'].width = 15
+    
+    # Сохраняем в буфер
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    
+    filename = f"organizations_{year}.xlsx"
+    if districts:
+        filename = f"organizations_{year}_filtered.xlsx"
+    
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
 
 @router.get("/{org_id}")
 async def get_organization_details(org_id: int, db: AsyncSession = Depends(get_db)):
     """
-    Полная карточка организации:
-    1. Инфо
-    2. История отчетов (для таблицы внутри карточки)
-    3. Прогноз AI (для графика)
+    Полная карточка организации.
     """
-    # 1. Сама организация
     org = await db.get(Organization, org_id)
     if not org:
         raise HTTPException(status_code=404, detail="Организация не найдена")
 
-    # 2. Исторические отчеты
+    # Загружаем связанные данные
+    stmt = select(Organization).options(
+        selectinload(Organization.district),
+        selectinload(Organization.okved)
+    ).where(Organization.id == org_id)
+    
+    res = await db.execute(stmt)
+    org = res.scalar_one_or_none()
+
+    # Исторические отчеты
     reports_res = await db.execute(
         select(InvestmentReport)
         .where(InvestmentReport.organization_id == org_id)
-        .order_by(InvestmentReport.report_year, InvestmentReport.quarter)
+        .order_by(InvestmentReport.year.desc())
     )
     reports = reports_res.scalars().all()
 
-    forecast_data = []
-    for report in reports:
-        if report.forecast_annual > 0:
-            forecast_data.append({
-                "year": report.year,
-                "amount": report.forecast_annual
-            })
-
     return {
         "info": {
+            "id": org.id,
             "name": org.name,
             "inn": org.inn,
-            "municipality": org.municipality,
+            "district": org.district.name if org.district else None,
+            "okved": org.okved.code if org.okved else None,
+            "is_smp": org.is_smp,
             "email": org.contact_email
         },
         "reports": [
             {
-                "year": r.report_year, 
-                "quarter": r.quarter, 
-                "amount": r.total_investment,
-                "source_fed": r.budget_federal,
-                "source_reg": r.budget_regional
+                "year": r.year,
+                "fact_annual": float(r.fact_annual or 0),
+                "forecast_annual": float(r.forecast_annual or 0),
+                "fact_q1": float(r.fact_q1 or 0),
+                "fact_q2": float(r.fact_q2 or 0),
+                "fact_q3": float(r.fact_q3 or 0),
+                "fact_q4": float(r.fact_q4 or 0),
+                "status": r.status
             } for r in reports
-        ],
+        ]
     }
-    
-@router.get("/export/summary")
-async def export_summary_report(
-    year: int, 
-    quarter: int,
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Генерация Excel файла со статусами сдачи отчетности.
-    """
-    # 1. Получаем данные (используем ту же логику, что и в status)
-    # (В идеале вынести логику получения данных в отдельную сервисную функцию, 
-    #  но сейчас скопируем для скорости)
-    
-    orgs_res = await db.execute(select(Organization).order_by(Organization.name))
-    all_orgs = orgs_res.scalars().all()
-    
-    reports_res = await db.execute(
-        select(InvestmentReport).where(
-            and_(
-                InvestmentReport.report_year == year,
-                InvestmentReport.quarter == quarter
-            )
-        )
-    )
-    reports = {r.organization_id: r for r in reports_res.scalars().all()}
-    
-    # 2. Создаем Excel
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = f"Отчет {year} Q{quarter}"
-    
-    # Заголовки
-    headers = ["Наименование", "ИНН", "Район", "Сумма инвестиций", "Статус"]
-    ws.append(headers)
-    
-    # Стили
-    header_font = Font(bold=True, color="FFFFFF")
-    header_fill = PatternFill("solid", fgColor="4F81BD")
-    
-    for cell in ws[1]:
-        cell.font = header_font
-        cell.fill = header_fill
-
-    # Данные
-    for org in all_orgs:
-        report = reports.get(org.id)
-        status = "Сдано" if report else "Не сдано"
-        amount = report.total_investment if report else 0
-        
-        row = [org.name, org.inn, org.municipality, amount, status]
-        ws.append(row)
-        
-        # Красим ячейку статуса
-        current_row = ws.max_row
-        status_cell = ws.cell(row=current_row, column=5)
-        if status == "Не сдано":
-            status_cell.font = Font(color="FF0000")
-        else:
-            status_cell.font = Font(color="008000")
-
-    # Автоширина колонок
-    for col in ws.columns:
-        max_length = 0
-        column = col[0].column_letter
-        for cell in col:
-            try:
-                if len(str(cell.value)) > max_length:
-                    max_length = len(str(cell.value))
-            except:
-                pass
-        adjusted_width = (max_length + 2)
-        ws.column_dimensions[column].width = adjusted_width
-
-    # 3. Отдаем файл
-    output = BytesIO()
-    wb.save(output)
-    output.seek(0)
-    
-    filename = f"monitor_{year}_q{quarter}.xlsx"
-    
-    headers = {
-        'Content-Disposition': f'attachment; filename="{filename}"'
-    }
-    
-    return StreamingResponse(
-        output, 
-        headers=headers, 
-        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    )

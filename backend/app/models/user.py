@@ -6,7 +6,7 @@ from app.models.base import Base
 if TYPE_CHECKING:
     from .organization import Organization
     from .investment_report import InvestmentReport
-    from .notification import Notification # <-- Добавь импорт
+    from .notification import Notification
 
 class User(Base):
     __tablename__ = 'users'
@@ -27,7 +27,6 @@ class User(Base):
         back_populates="created_by_user"
     )
 
-    # --- ДОБАВЬ ЭТУ СВЯЗЬ ---
     notifications: Mapped[List["Notification"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan"

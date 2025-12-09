@@ -14,10 +14,6 @@ class MLService:
     
     @staticmethod
     async def generate_forecast(org_id: int, session: AsyncSession):
-        """
-        Строит прогноз на будущие годы на основе исторических данных.
-        Использует forecast_annual из investment_reports.
-        """
         query = select(InvestmentReport).where(
             InvestmentReport.organization_id == org_id
         ).order_by(InvestmentReport.year)
@@ -29,11 +25,10 @@ class MLService:
             logger.warning(f"Org {org_id}: Недостаточно данных для прогноза (минимум 2 года)")
             return None
 
-        # Готовим DataFrame для Prophet
         data = []
         for r in reports:
-            if r.fact_annual > 0:  # Используем только годы с фактическими данными
-                date_str = f"{r.year}-12-31"  # Конец года
+            if r.fact_annual > 0:
+                date_str = f"{r.year}-12-31"
                 data.append({
                     'ds': date_str,
                     'y': float(r.fact_annual)
@@ -45,7 +40,6 @@ class MLService:
             
         df = pd.DataFrame(data)
         
-        # Магия Prophet
         try:
             m = Prophet(
                 yearly_seasonality=True, 
@@ -54,16 +48,14 @@ class MLService:
             )
             m.fit(df)
             
-            # Прогноз на 3 года вперед
             future = m.make_future_dataframe(periods=3, freq='Y')
             forecast = m.predict(future)
             
-            # Возвращаем только будущие значения
             forecast_results = []
-            future_data = forecast.tail(3)  # Последние 3 года
+            future_data = forecast.tail(3)
             
             for _, row in future_data.iterrows():
-                yhat = max(0, row['yhat'])  # Не может быть отрицательным
+                yhat = max(0, row['yhat'])
                 forecast_results.append({
                     'year': row['ds'].year,
                     'predicted_amount': round(yhat, 2)
@@ -77,10 +69,5 @@ class MLService:
 
     @staticmethod
     async def perform_clustering(session: AsyncSession):
-        """
-        Кластеризация организаций по объему инвестиций.
-        ВНИМАНИЕ: Эта функция не используется, т.к. мы удалили поле cluster_group.
-        Оставлена для совместимости.
-        """
         logger.warning("Clustering is deprecated - cluster_group field removed from organizations")
         return {"status": "deprecated", "message": "Clustering functionality removed"}

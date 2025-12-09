@@ -12,8 +12,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 async def seed_districts(session):
-    """Заполняет справочник районов (важно для карты и статистики)"""
-    # Список должен совпадать с тем, что в Excel (колонке Район)
     districts_list = [
         "Абатский район", "Армизонский район", "Аромашевский район", 
         "Бердюжский район", "Вагайский район", "Викуловский район", 
@@ -40,7 +38,6 @@ async def seed_data():
     logger.info("🌱 Инициализация БД...")
 
     async with async_session_factory() as session:
-        # 1. Админ
         res = await session.execute(select(User).where(User.email == settings.FIRST_SUPERUSER))
         if not res.scalar_one_or_none():
             user = User(
@@ -52,14 +49,11 @@ async def seed_data():
             await session.commit()
             logger.info("✅ Админ создан")
 
-        # 2. Районы (ОБЯЗАТЕЛЬНО)
         await seed_districts(session)
 
-        # 3. Загрузка Excel
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        data_dir = os.path.join(base_dir, "initial_data") # Папка с вашими файлами
+        data_dir = os.path.join(base_dir, "initial_data")
         
-        # Файлы для загрузки
         files_to_load = {
             "2022.xlsx": 2022,
             "2023.xlsx": 2023,

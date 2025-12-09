@@ -15,14 +15,12 @@ engine = create_async_engine(
     max_overflow=20 
 )
 
-# Создаем фабрику сессий с правильным именем
 async_session_factory = async_sessionmaker(
     engine,
     class_=AsyncSession,
     expire_on_commit=False
 )
 
-# Оставляем алиас AsyncSessionLocal для совместимости (если используется где-то еще)
 AsyncSessionLocal = async_session_factory
 
 Base = declarative_base()

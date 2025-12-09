@@ -14,5 +14,4 @@ class OrganizationType(Base):
     code: Mapped[str] = mapped_column(String(10), unique=True, nullable=False)  # "OOO", "PAO", "IP"
     name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)  # "ООО", "ПАО", "ИП"
     
-    # Связь с организациями
     organizations: Mapped[list["Organization"]] = relationship(back_populates="org_type_ref")

@@ -33,7 +33,7 @@ class InvestmentReport(Base):
     
     status: Mapped[str] = mapped_column(
         String(50), 
-        default=ReportStatus.OVERDUE.value,  # По умолчанию "Просрочен"
+        default=ReportStatus.OVERDUE.value,
         nullable=False
     )
     

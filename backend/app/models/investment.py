@@ -4,7 +4,6 @@ from sqlalchemy import Integer, String, Boolean, ForeignKey, DateTime, func, Num
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from .base import Base
 
-# Таблица: Годовые планы (Сущность)
 class InvestmentAnnual(Base):
     __tablename__ = 'investment_annual'
     
@@ -22,7 +21,6 @@ class InvestmentAnnual(Base):
     
     organization: Mapped["Organization"] = relationship(back_populates="annual_plans")
 
-# Таблица: Квартальные факты (Сущность)
 class InvestmentQuarterly(Base):
     __tablename__ = 'investment_quarterly'
     

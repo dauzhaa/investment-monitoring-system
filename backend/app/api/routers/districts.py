@@ -12,10 +12,7 @@ async def get_district_details(
     district_name: str,
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Получить детальную статистику по конкретному району.
-    """
-    # Находим район
+
     district_res = await db.execute(
         select(District).where(District.name == district_name)
     )
@@ -24,14 +21,12 @@ async def get_district_details(
     if not district:
         raise HTTPException(status_code=404, detail="Район не найден")
     
-    # Получаем организации в районе
     orgs_res = await db.execute(
         select(Organization).where(Organization.district_id == district.id)
     )
     organizations = orgs_res.scalars().all()
     org_ids = [org.id for org in organizations]
     
-    # Статистика по инвестициям
     current_year = 2025
     investment_stats = await db.execute(
         select(
@@ -44,7 +39,6 @@ async def get_district_details(
     )
     stats = investment_stats.one()
     
-    # История по годам
     history_res = await db.execute(
         select(
             InvestmentReport.year,
@@ -55,7 +49,6 @@ async def get_district_details(
     )
     history = [{"year": row[0], "amount": round(row[1] or 0, 2)} for row in history_res.all()]
     
-    # Список организаций с их инвестициями
     orgs_data = []
     for org in organizations:
         report_res = await db.execute(

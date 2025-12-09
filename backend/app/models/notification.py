@@ -8,10 +8,9 @@ if TYPE_CHECKING:
     from .user import User
 
 class Notification(Base):
-    __tablename__ = 'notifications'  # Множественное число
+    __tablename__ = 'notifications'
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    # ИСПРАВЛЕНО: ссылка на 'users.id', а не 'app_user.id'
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     
     title: Mapped[str] = mapped_column(String, nullable=False)

@@ -18,7 +18,6 @@ class Organization(Base):
     inn: Mapped[str] = mapped_column(String(12), unique=True, nullable=False, index=True)
     contact_email: Mapped[str | None] = mapped_column(String(255))
     
-    # Внешние ключи на справочники
     district_id: Mapped[int | None] = mapped_column(
         ForeignKey("directory_districts.id", ondelete="SET NULL")
     )
@@ -28,12 +27,9 @@ class Organization(Base):
     org_type_id: Mapped[int | None] = mapped_column(
         ForeignKey("organization_types.id", ondelete="SET NULL")
     )
-    # municipality_id УДАЛЕНО! ❌
-    
-    # Простые поля
+
     is_smp: Mapped[bool] = mapped_column(Boolean, default=False)
     
-    # Связи (relationships)
     district: Mapped["District"] = relationship()
     okved: Mapped["Okved"] = relationship()
     org_type_ref: Mapped["OrganizationType"] = relationship(back_populates="organizations")
