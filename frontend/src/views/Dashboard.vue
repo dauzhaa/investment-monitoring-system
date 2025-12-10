@@ -1,6 +1,6 @@
 <template>
   <div class="dashboard">
-    <!-- Выбор года сверху -->
+    <!-- Заголовок и выбор года -->
     <div class="d-flex align-center mb-6">
       <h1 class="text-h4 font-weight-bold">Дашборд</h1>
       <v-spacer></v-spacer>
@@ -18,7 +18,7 @@
 
     <!-- Виджеты статистики -->
     <v-row class="mb-6">
-      <!-- Общее кол-во организаций -->
+      <!-- Всего организаций -->
       <v-col cols="12" sm="6" md="3">
         <v-card class="pa-4 h-100" elevation="2">
           <div class="d-flex align-center mb-2">
@@ -29,14 +29,14 @@
         </v-card>
       </v-col>
 
-      <!-- Общий объём инвестиций за текущий год -->
+      <!-- Инвестиции за год -->
       <v-col cols="12" sm="6" md="3">
         <v-card class="pa-4 h-100" elevation="2">
           <div class="d-flex align-center mb-2">
             <v-icon color="green" size="24" class="mr-2">mdi-currency-rub</v-icon>
             <span class="text-body-2 text-grey">Инвестиции за {{ selectedYear }} г.</span>
           </div>
-          <div class="text-h5 font-weight-bold text-green">{{ formatMoney(stats.factTotal) }}</div>
+          <div class="text-h5 font-weight-bold text-green mb-1">{{ formatMoney(stats.factTotal) }}</div>
           <div class="text-caption text-grey">ФАКТ</div>
           <v-divider class="my-2"></v-divider>
           <div class="text-h6 text-red">{{ formatMoney(stats.planTotal) }}</div>
@@ -56,7 +56,7 @@
           </div>
           <v-progress-linear
             :model-value="Math.min(stats.executionPercent, 100)"
-            :color="getExecutionColor(stats.executionPercent)"
+            :color="stats.executionPercent >= 100 ? 'green' : stats.executionPercent >= 50 ? 'orange' : 'red'"
             height="8"
             rounded
             class="mt-2"
@@ -79,71 +79,106 @@
       </v-col>
     </v-row>
 
-    <!-- Карта на всю ширину -->
-    <v-card elevation="2" class="pa-4">
-      <div class="text-h6 font-weight-bold mb-4 text-center">Тюменская область</div>
-      
-      <div ref="mapContainer" style="height: 600px; width: 100%;"></div>
-
-      <!-- Диалог статистики района -->
-      <v-dialog v-model="districtDialog" max-width="600">
-        <v-card>
-          <v-card-title class="bg-primary text-white">
-            {{ selectedDistrict.name }}
-          </v-card-title>
-          <v-card-text class="pa-4">
-            <v-row>
-              <v-col cols="6">
-                <div class="text-body-2 text-grey">Организаций</div>
-                <div class="text-h5 font-weight-bold">{{ selectedDistrict.orgCount }}</div>
-              </v-col>
-              <v-col cols="6">
-                <div class="text-body-2 text-grey">Инвестиции ФАКТ</div>
-                <div class="text-h5 font-weight-bold text-green">{{ formatMoney(selectedDistrict.fact) }}</div>
-              </v-col>
-              <v-col cols="6">
-                <div class="text-body-2 text-grey">Инвестиции ПЛАН</div>
-                <div class="text-h5 font-weight-bold text-red">{{ formatMoney(selectedDistrict.plan) }}</div>
-              </v-col>
-              <v-col cols="6">
-                <div class="text-body-2 text-grey">Освоение</div>
-                <div class="text-h5 font-weight-bold" :class="getExecutionColor(selectedDistrict.execution)">
-                  {{ selectedDistrict.execution }}%
-                </div>
-              </v-col>
-            </v-row>
-
-            <!-- Выбор квартала в диалоге -->
-            <v-divider class="my-4"></v-divider>
-            <div class="d-flex align-center mb-3">
-              <span class="text-body-1 font-weight-medium mr-4">Данные по кварталам:</span>
-              <v-btn-toggle v-model="dialogQuarter" mandatory density="compact" color="primary">
-                <v-btn value="1">Q1</v-btn>
-                <v-btn value="2">Q2</v-btn>
-                <v-btn value="3">Q3</v-btn>
-                <v-btn value="4">Q4</v-btn>
-                <v-btn value="year">Год</v-btn>
-              </v-btn-toggle>
-            </div>
-
-            <v-row>
-              <v-col cols="6">
-                <div class="text-body-2 text-grey">ФАКТ за период</div>
-                <div class="text-h6 text-green">{{ formatMoney(selectedDistrict.quarterData?.fact || 0) }}</div>
-              </v-col>
-              <v-col cols="6">
-                <div class="text-body-2 text-grey">ПЛАН за период</div>
-                <div class="text-h6 text-red">{{ formatMoney(selectedDistrict.quarterData?.plan || 0) }}</div>
-              </v-col>
-            </v-row>
-          </v-card-text>
-          <v-card-actions>
-            <v-spacer></v-spacer>
-            <v-btn color="primary" @click="districtDialog = false">Закрыть</v-btn>
-          </v-card-actions>
+    <!-- Основной контент: Карта и Графики -->
+    <v-row>
+      <!-- Карта -->
+      <v-col cols="12" lg="7">
+        <v-card elevation="2" class="pa-4">
+          <div class="text-h6 font-weight-bold mb-4 text-center">Тюменская область</div>
+          <div class="text-caption text-center text-grey mb-2">Нажмите на район для просмотра статистики</div>
+          <div ref="mapContainer" style="height: 500px; width: 100%;"></div>
         </v-card>
-      </v-dialog>
-    </v-card>
+      </v-col>
+
+      <!-- Графики -->
+      <v-col cols="12" lg="5">
+        <!-- Переключатель: По годам / По кварталам -->
+        <v-card elevation="2" class="pa-4 mb-4">
+          <div class="d-flex align-center mb-4">
+            <span class="text-h6 font-weight-bold">Динамика инвестиций</span>
+            <v-spacer></v-spacer>
+            <v-btn-toggle v-model="chartMode" mandatory density="compact" color="primary">
+              <v-btn value="years" size="small">По годам</v-btn>
+              <v-btn value="quarters" size="small">По кварталам</v-btn>
+            </v-btn-toggle>
+          </div>
+          <div ref="chartContainer" style="height: 350px; width: 100%;"></div>
+        </v-card>
+
+        <!-- Топ-5 районов -->
+        <v-card elevation="2" class="pa-4">
+          <div class="text-h6 font-weight-bold mb-3">Топ-5 районов</div>
+          <v-list density="compact">
+            <v-list-item
+              v-for="(district, index) in topDistricts"
+              :key="district.name"
+              class="px-0"
+            >
+              <template v-slot:prepend>
+                <v-avatar 
+                  :color="index === 0 ? 'amber' : index === 1 ? 'grey-lighten-1' : index === 2 ? 'brown-lighten-1' : 'blue-grey-lighten-3'" 
+                  size="28"
+                  class="mr-3"
+                >
+                  <span class="text-caption font-weight-bold">{{ index + 1 }}</span>
+                </v-avatar>
+              </template>
+              <v-list-item-title>{{ district.name }}</v-list-item-title>
+              <template v-slot:append>
+                <span class="text-green font-weight-medium">{{ formatMoney(district.value) }}</span>
+              </template>
+            </v-list-item>
+          </v-list>
+        </v-card>
+      </v-col>
+    </v-row>
+
+    <!-- Диалог статистики района -->
+    <v-dialog v-model="districtDialog" max-width="600">
+      <v-card>
+        <v-card-title class="bg-primary text-white">
+          {{ selectedDistrict.name }}
+        </v-card-title>
+        <v-card-text class="pa-4">
+          <v-row>
+            <v-col cols="6">
+              <div class="text-body-2 text-grey">Организаций</div>
+              <div class="text-h5 font-weight-bold">{{ selectedDistrict.orgCount }}</div>
+            </v-col>
+            <v-col cols="6">
+              <div class="text-body-2 text-grey">Инвестиции ФАКТ</div>
+              <div class="text-h5 font-weight-bold text-green">{{ formatMoney(selectedDistrict.fact) }}</div>
+            </v-col>
+            <v-col cols="6">
+              <div class="text-body-2 text-grey">Инвестиции ПЛАН</div>
+              <div class="text-h5 font-weight-bold text-red">{{ formatMoney(selectedDistrict.plan) }}</div>
+            </v-col>
+            <v-col cols="6">
+              <div class="text-body-2 text-grey">Освоение</div>
+              <div class="text-h5 font-weight-bold" :class="getExecutionColor(selectedDistrict.execution)">
+                {{ selectedDistrict.execution }}%
+              </div>
+            </v-col>
+          </v-row>
+
+          <v-divider class="my-4"></v-divider>
+          
+          <div class="text-subtitle-1 font-weight-medium mb-3">Данные по кварталам {{ selectedYear }}:</div>
+          <v-row>
+            <v-col cols="3" v-for="q in 4" :key="q" class="text-center">
+              <div class="text-caption text-grey">Q{{ q }}</div>
+              <div class="text-body-1 font-weight-medium">
+                {{ formatMoneyShort(selectedDistrict.quarters?.[q - 1] || 0) }}
+              </div>
+            </v-col>
+          </v-row>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn color="primary" @click="districtDialog = false">Закрыть</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -155,8 +190,11 @@ import axios from 'axios';
 // Состояние
 const selectedYear = ref(2022);
 const availableYears = [2025, 2024, 2023, 2022];
+const chartMode = ref('years');
 const mapContainer = ref(null);
+const chartContainer = ref(null);
 let mapChart = null;
+let barChart = null;
 
 const districtDialog = ref(false);
 const selectedDistrict = ref({
@@ -165,13 +203,12 @@ const selectedDistrict = ref({
   fact: 0,
   plan: 0,
   execution: 0,
-  quarterData: null
+  quarters: [0, 0, 0, 0]
 });
-const dialogQuarter = ref('year');
 
 // Статистика
 const stats = ref({
-  totalOrganizations: 0,
+  totalOrganizations: 274,
   factTotal: 0,
   planTotal: 0,
   executionPercent: 0,
@@ -181,55 +218,47 @@ const stats = ref({
 
 // Данные по районам
 const districtsData = ref([]);
+const topDistricts = computed(() => {
+  return [...districtsData.value]
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 5);
+});
 
-// GeoJSON Тюменской области (упрощенный)
-const tyumenGeoJson = {
-  "type": "FeatureCollection",
-  "features": [
-    {"type": "Feature", "properties": {"name": "г. Тюмень"}, "geometry": {"type": "Polygon", "coordinates": [[[68.5, 57.1], [68.7, 57.1], [68.7, 57.2], [68.5, 57.2], [68.5, 57.1]]]}},
-    {"type": "Feature", "properties": {"name": "г. Тобольск"}, "geometry": {"type": "Polygon", "coordinates": [[[68.2, 58.1], [68.4, 58.1], [68.4, 58.3], [68.2, 58.3], [68.2, 58.1]]]}},
-    {"type": "Feature", "properties": {"name": "г. Ишим"}, "geometry": {"type": "Polygon", "coordinates": [[[69.4, 56.0], [69.6, 56.0], [69.6, 56.2], [69.4, 56.2], [69.4, 56.0]]]}},
-    {"type": "Feature", "properties": {"name": "г. Ялуторовск"}, "geometry": {"type": "Polygon", "coordinates": [[[68.3, 56.6], [68.5, 56.6], [68.5, 56.8], [68.3, 56.8], [68.3, 56.6]]]}},
-    {"type": "Feature", "properties": {"name": "г. Заводоуковск"}, "geometry": {"type": "Polygon", "coordinates": [[[68.1, 56.4], [68.3, 56.4], [68.3, 56.6], [68.1, 56.6], [68.1, 56.4]]]}},
-    {"type": "Feature", "properties": {"name": "Тюменский район"}, "geometry": {"type": "Polygon", "coordinates": [[[68.0, 56.8], [69.0, 56.8], [69.0, 57.5], [68.0, 57.5], [68.0, 56.8]]]}},
-    {"type": "Feature", "properties": {"name": "Тобольский район"}, "geometry": {"type": "Polygon", "coordinates": [[[67.5, 58.0], [69.0, 58.0], [69.0, 59.5], [67.5, 59.5], [67.5, 58.0]]]}},
-    {"type": "Feature", "properties": {"name": "Ишимский район"}, "geometry": {"type": "Polygon", "coordinates": [[[69.0, 55.5], [70.5, 55.5], [70.5, 56.5], [69.0, 56.5], [69.0, 55.5]]]}},
-    {"type": "Feature", "properties": {"name": "Ялуторовский район"}, "geometry": {"type": "Polygon", "coordinates": [[[66.5, 56.5], [68.0, 56.5], [68.0, 57.0], [66.5, 57.0], [66.5, 56.5]]]}},
-    {"type": "Feature", "properties": {"name": "Заводоуковский район"}, "geometry": {"type": "Polygon", "coordinates": [[[66.0, 56.0], [68.0, 56.0], [68.0, 56.5], [66.0, 56.5], [66.0, 56.0]]]}},
-    {"type": "Feature", "properties": {"name": "Абатский район"}, "geometry": {"type": "Polygon", "coordinates": [[[70.0, 56.0], [71.5, 56.0], [71.5, 56.8], [70.0, 56.8], [70.0, 56.0]]]}},
-    {"type": "Feature", "properties": {"name": "Армизонский район"}, "geometry": {"type": "Polygon", "coordinates": [[[67.5, 55.5], [69.0, 55.5], [69.0, 56.2], [67.5, 56.2], [67.5, 55.5]]]}},
-    {"type": "Feature", "properties": {"name": "Аромашевский район"}, "geometry": {"type": "Polygon", "coordinates": [[[69.5, 57.0], [71.0, 57.0], [71.0, 57.8], [69.5, 57.8], [69.5, 57.0]]]}},
-    {"type": "Feature", "properties": {"name": "Бердюжский район"}, "geometry": {"type": "Polygon", "coordinates": [[[68.0, 55.0], [69.5, 55.0], [69.5, 55.7], [68.0, 55.7], [68.0, 55.0]]]}},
-    {"type": "Feature", "properties": {"name": "Вагайский район"}, "geometry": {"type": "Polygon", "coordinates": [[[68.5, 57.5], [70.0, 57.5], [70.0, 58.5], [68.5, 58.5], [68.5, 57.5]]]}},
-    {"type": "Feature", "properties": {"name": "Викуловский район"}, "geometry": {"type": "Polygon", "coordinates": [[[70.5, 57.0], [72.0, 57.0], [72.0, 58.0], [70.5, 58.0], [70.5, 57.0]]]}},
-    {"type": "Feature", "properties": {"name": "Голышмановский район"}, "geometry": {"type": "Polygon", "coordinates": [[[68.5, 56.0], [70.0, 56.0], [70.0, 56.8], [68.5, 56.8], [68.5, 56.0]]]}},
-    {"type": "Feature", "properties": {"name": "Исетский район"}, "geometry": {"type": "Polygon", "coordinates": [[[65.5, 56.0], [67.0, 56.0], [67.0, 56.8], [65.5, 56.8], [65.5, 56.0]]]}},
-    {"type": "Feature", "properties": {"name": "Казанский район"}, "geometry": {"type": "Polygon", "coordinates": [[[69.0, 55.0], [70.5, 55.0], [70.5, 55.8], [69.0, 55.8], [69.0, 55.0]]]}},
-    {"type": "Feature", "properties": {"name": "Нижнетавдинский район"}, "geometry": {"type": "Polygon", "coordinates": [[[67.5, 57.2], [69.0, 57.2], [69.0, 58.0], [67.5, 58.0], [67.5, 57.2]]]}},
-    {"type": "Feature", "properties": {"name": "Омутинский район"}, "geometry": {"type": "Polygon", "coordinates": [[[70.0, 56.5], [71.5, 56.5], [71.5, 57.3], [70.0, 57.3], [70.0, 56.5]]]}},
-    {"type": "Feature", "properties": {"name": "Сладковский район"}, "geometry": {"type": "Polygon", "coordinates": [[[70.5, 55.5], [72.0, 55.5], [72.0, 56.3], [70.5, 56.3], [70.5, 55.5]]]}},
-    {"type": "Feature", "properties": {"name": "Сорокинский район"}, "geometry": {"type": "Polygon", "coordinates": [[[69.5, 56.5], [71.0, 56.5], [71.0, 57.2], [69.5, 57.2], [69.5, 56.5]]]}},
-    {"type": "Feature", "properties": {"name": "Уватский район"}, "geometry": {"type": "Polygon", "coordinates": [[[68.0, 59.0], [71.0, 59.0], [71.0, 61.0], [68.0, 61.0], [68.0, 59.0]]]}},
-    {"type": "Feature", "properties": {"name": "Упоровский район"}, "geometry": {"type": "Polygon", "coordinates": [[[66.0, 55.5], [67.5, 55.5], [67.5, 56.3], [66.0, 56.3], [66.0, 55.5]]]}},
-    {"type": "Feature", "properties": {"name": "Юргинский район"}, "geometry": {"type": "Polygon", "coordinates": [[[68.0, 56.5], [69.5, 56.5], [69.5, 57.2], [68.0, 57.2], [68.0, 56.5]]]}},
-    {"type": "Feature", "properties": {"name": "Ярковский район"}, "geometry": {"type": "Polygon", "coordinates": [[[68.5, 57.0], [70.0, 57.0], [70.0, 57.8], [68.5, 57.8], [68.5, 57.0]]]}}
-  ]
-};
+// Данные для графиков
+const yearlyData = ref([
+  { year: 2022, fact: 390509, plan: 393401 },
+  { year: 2023, fact: 420000, plan: 410000 },
+  { year: 2024, fact: 450000, plan: 440000 },
+  { year: 2025, fact: 480474, plan: 470000 }
+]);
 
-// Форматирование денег
+const quarterlyData = ref([
+  { quarter: 'Q1', fact: 0, plan: 0 },
+  { quarter: 'Q2', fact: 0, plan: 0 },
+  { quarter: 'Q3', fact: 0, plan: 0 },
+  { quarter: 'Q4', fact: 0, plan: 0 }
+]);
+
+// Форматирование
 const formatMoney = (value) => {
-  if (value >= 1000000) {
+  if (!value) return '0 тыс. ₽';
+  if (value >= 1000) {
     return (value / 1000).toFixed(1) + ' млн ₽';
-  } else if (value >= 1000) {
-    return value.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' тыс. ₽';
   }
   return value.toFixed(0) + ' тыс. ₽';
 };
 
-// Цвет освоения
+const formatMoneyShort = (value) => {
+  if (!value) return '0';
+  if (value >= 1000) {
+    return (value / 1000).toFixed(1) + 'М';
+  }
+  return value.toFixed(0) + 'т';
+};
+
 const getExecutionColor = (percent) => {
   if (percent >= 100) return 'text-green';
-  if (percent >= 80) return 'text-green';
+  if (percent >= 80) return 'text-light-green';
   if (percent >= 50) return 'text-orange';
   return 'text-red';
 };
@@ -237,12 +266,11 @@ const getExecutionColor = (percent) => {
 // Загрузка данных
 const loadData = async () => {
   try {
-    // Пытаемся получить данные из API
     const response = await axios.get(`/api/v1/analytics/dashboard?year=${selectedYear.value}`);
     const data = response.data;
     
     stats.value = {
-      totalOrganizations: data.totalOrganizations || 287,
+      totalOrganizations: data.totalOrganizations || 274,
       factTotal: data.factTotal || 0,
       planTotal: data.planTotal || 0,
       executionPercent: data.executionPercent || 0,
@@ -252,47 +280,136 @@ const loadData = async () => {
     
     // Загружаем данные карты
     const mapResponse = await axios.get(`/api/v1/analytics/map?year=${selectedYear.value}`);
-    districtsData.value = mapResponse.data;
+    districtsData.value = mapResponse.data || [];
+
+    // Загружаем квартальные данные
+    const quartersResponse = await axios.get(`/api/v1/analytics/quarters?year=${selectedYear.value}`);
+    if (quartersResponse.data) {
+      quarterlyData.value = quartersResponse.data.map((q, i) => ({
+        quarter: `Q${i + 1}`,
+        fact: q.fact || 0,
+        plan: q.plan || 0
+      }));
+    }
     
   } catch (e) {
-    // Mock данные для 2022 года
-    if (selectedYear.value === 2022) {
-      stats.value = {
-        totalOrganizations: 287,
-        factTotal: 480474.0,
-        planTotal: 393401.0,
-        executionPercent: 122.1,
-        dataQuality: 95,
-        orgsWithData: 273
-      };
-      
-      districtsData.value = [
-        { name: 'г. Тюмень', fact: 180000, plan: 150000, orgCount: 85 },
-        { name: 'Тюменский район', fact: 45000, plan: 40000, orgCount: 32 },
-        { name: 'г. Тобольск', fact: 35000, plan: 30000, orgCount: 18 },
-        { name: 'Ишимский район', fact: 28000, plan: 25000, orgCount: 15 },
-        { name: 'Тобольский район', fact: 22000, plan: 20000, orgCount: 12 },
-        { name: 'Заводоуковский район', fact: 18000, plan: 15000, orgCount: 14 },
-        { name: 'Ялуторовский район', fact: 15000, plan: 12000, orgCount: 11 },
-        { name: 'Абатский район', fact: 12000, plan: 10000, orgCount: 8 },
-        { name: 'Армизонский район', fact: 10000, plan: 8000, orgCount: 7 },
-        { name: 'Юргинский район', fact: 8000, plan: 7000, orgCount: 6 },
-      ];
-    } else {
-      stats.value = {
-        totalOrganizations: 274,
-        factTotal: 0,
-        planTotal: 0,
-        executionPercent: 0,
-        dataQuality: 0,
-        orgsWithData: 0
-      };
-      districtsData.value = [];
-    }
+    console.log('Using mock data');
+    loadMockData();
   }
   
   await nextTick();
   initMap();
+  initChart();
+};
+
+const loadMockData = () => {
+  // Mock данные для 2022 года на основе реального файла
+  const mockByYear = {
+    2022: {
+      totalOrganizations: 274,
+      factTotal: 390509,
+      planTotal: 393401,
+      executionPercent: 99.3,
+      dataQuality: 95,
+      orgsWithData: 260,
+      quarters: [
+        { quarter: 'Q1', fact: 78102, plan: 98350 },
+        { quarter: 'Q2', fact: 109342, plan: 98350 },
+        { quarter: 'Q3', fact: 124982, plan: 98350 },
+        { quarter: 'Q4', fact: 78083, plan: 98351 }
+      ],
+      districts: [
+        { name: 'г. Тюмень', value: 156204, plan: 157360, orgCount: 89 },
+        { name: 'Тюменский район', value: 46853, plan: 47208, orgCount: 28 },
+        { name: 'г. Тобольск', value: 35127, plan: 35406, orgCount: 18 },
+        { name: 'Ишимский район', value: 27341, plan: 27558, orgCount: 15 },
+        { name: 'г. Ишим', value: 23426, plan: 23612, orgCount: 12 },
+        { name: 'Тобольский район', value: 19551, plan: 19706, orgCount: 14 },
+        { name: 'Заводоуковский район', value: 15641, plan: 15765, orgCount: 11 },
+        { name: 'г. Ялуторовск', value: 11731, plan: 11824, orgCount: 8 },
+        { name: 'Ялуторовский район', value: 9773, plan: 9850, orgCount: 7 },
+        { name: 'Абатский район', value: 7818, plan: 7880, orgCount: 6 },
+        { name: 'Армизонский район', value: 5864, plan: 5910, orgCount: 5 },
+        { name: 'Аромашевский район', value: 4886, plan: 4925, orgCount: 4 },
+        { name: 'Бердюжский район', value: 3909, plan: 3940, orgCount: 4 },
+        { name: 'Вагайский район', value: 3421, plan: 3448, orgCount: 4 },
+        { name: 'Викуловский район', value: 2932, plan: 2955, orgCount: 3 },
+        { name: 'Голышмановский район', value: 2443, plan: 2463, orgCount: 3 },
+        { name: 'Исетский район', value: 1954, plan: 1970, orgCount: 3 },
+        { name: 'Казанский район', value: 1466, plan: 1478, orgCount: 2 },
+        { name: 'Нижнетавдинский район', value: 1466, plan: 1478, orgCount: 3 },
+        { name: 'Омутинский район', value: 977, plan: 985, orgCount: 2 },
+        { name: 'Сладковский район', value: 977, plan: 985, orgCount: 2 },
+        { name: 'Сорокинский район', value: 489, plan: 493, orgCount: 2 },
+        { name: 'Уватский район', value: 4886, plan: 4925, orgCount: 5 },
+        { name: 'Упоровский район', value: 1954, plan: 1970, orgCount: 3 },
+        { name: 'Юргинский район', value: 1466, plan: 1478, orgCount: 3 },
+        { name: 'Ярковский район', value: 977, plan: 985, orgCount: 2 },
+        { name: 'г. Заводоуковск', value: 5864, plan: 5910, orgCount: 4 }
+      ]
+    },
+    2023: {
+      totalOrganizations: 274,
+      factTotal: 420000,
+      planTotal: 410000,
+      executionPercent: 102.4,
+      dataQuality: 96,
+      orgsWithData: 263,
+      quarters: [
+        { quarter: 'Q1', fact: 84000, plan: 102500 },
+        { quarter: 'Q2', fact: 117600, plan: 102500 },
+        { quarter: 'Q3', fact: 134400, plan: 102500 },
+        { quarter: 'Q4', fact: 84000, plan: 102500 }
+      ],
+      districts: []
+    },
+    2024: {
+      totalOrganizations: 274,
+      factTotal: 450000,
+      planTotal: 440000,
+      executionPercent: 102.3,
+      dataQuality: 97,
+      orgsWithData: 266,
+      quarters: [
+        { quarter: 'Q1', fact: 90000, plan: 110000 },
+        { quarter: 'Q2', fact: 126000, plan: 110000 },
+        { quarter: 'Q3', fact: 144000, plan: 110000 },
+        { quarter: 'Q4', fact: 90000, plan: 110000 }
+      ],
+      districts: []
+    },
+    2025: {
+      totalOrganizations: 274,
+      factTotal: 480474,
+      planTotal: 470000,
+      executionPercent: 102.2,
+      dataQuality: 57,
+      orgsWithData: 156,
+      quarters: [
+        { quarter: 'Q1', fact: 96095, plan: 117500 },
+        { quarter: 'Q2', fact: 134533, plan: 117500 },
+        { quarter: 'Q3', fact: 153752, plan: 117500 },
+        { quarter: 'Q4', fact: 0, plan: 117500 }  // Нет данных за Q4 2025
+      ],
+      districts: []
+    }
+  };
+
+  const yearData = mockByYear[selectedYear.value] || mockByYear[2022];
+  
+  stats.value = {
+    totalOrganizations: yearData.totalOrganizations,
+    factTotal: yearData.factTotal,
+    planTotal: yearData.planTotal,
+    executionPercent: yearData.executionPercent,
+    dataQuality: yearData.dataQuality,
+    orgsWithData: yearData.orgsWithData
+  };
+  
+  quarterlyData.value = yearData.quarters;
+  
+  // Для районов используем данные 2022 как базу
+  districtsData.value = mockByYear[2022].districts;
 };
 
 // Инициализация карты
@@ -305,14 +422,25 @@ const initMap = () => {
   
   mapChart = echarts.init(mapContainer.value);
   
-  // Регистрируем GeoJSON
-  echarts.registerMap('tyumen', tyumenGeoJson);
-  
-  // Создаём данные для карты
+  // Используем реальный GeoJSON Тюменской области
+  // Загружаем через fetch или используем встроенный
+  fetch('/tyumen-region.geojson')
+    .then(res => res.json())
+    .then(geoJson => {
+      echarts.registerMap('tyumen', geoJson);
+      renderMap();
+    })
+    .catch(() => {
+      // Fallback - простая визуализация как treemap
+      renderTreemap();
+    });
+};
+
+const renderMap = () => {
   const mapData = districtsData.value.map(d => ({
     name: d.name,
-    value: d.fact || 0,
-    fact: d.fact || 0,
+    value: d.value || 0,
+    fact: d.value || 0,
     plan: d.plan || 0,
     orgCount: d.orgCount || 0
   }));
@@ -344,12 +472,12 @@ const initMap = () => {
       zoom: 1.2,
       label: {
         show: true,
-        fontSize: 10
+        fontSize: 9
       },
       emphasis: {
         label: {
           show: true,
-          fontSize: 12,
+          fontSize: 11,
           fontWeight: 'bold'
         },
         itemStyle: {
@@ -362,60 +490,226 @@ const initMap = () => {
   
   mapChart.setOption(option);
   
-  // Обработчик клика по району
   mapChart.on('click', (params) => {
     if (params.data) {
-      selectedDistrict.value = {
-        name: params.name,
-        orgCount: params.data.orgCount || 0,
-        fact: params.data.fact || 0,
-        plan: params.data.plan || 0,
-        execution: params.data.plan > 0 
-          ? Math.round((params.data.fact / params.data.plan) * 100) 
-          : 0,
-        quarterData: {
-          fact: params.data.fact || 0,
-          plan: params.data.plan || 0
-        }
-      };
-      districtDialog.value = true;
+      openDistrictDialog(params.data);
     }
-  });
-  
-  // Ресайз
-  window.addEventListener('resize', () => {
-    mapChart?.resize();
   });
 };
 
-// Следим за изменением квартала в диалоге
-watch(dialogQuarter, async (quarter) => {
-  if (!selectedDistrict.value.name) return;
+const renderTreemap = () => {
+  // Treemap как альтернатива карте
+  const mapData = districtsData.value.map(d => ({
+    name: d.name,
+    value: d.value || 0,
+    fact: d.value || 0,
+    plan: d.plan || 0,
+    orgCount: d.orgCount || 0
+  }));
+
+  const option = {
+    tooltip: {
+      formatter: (params) => {
+        const data = params.data || {};
+        return `<strong>${params.name}</strong><br/>
+          ФАКТ: ${formatMoney(data.fact || 0)}<br/>
+          ПЛАН: ${formatMoney(data.plan || 0)}<br/>
+          Организаций: ${data.orgCount || 0}`;
+      }
+    },
+    series: [{
+      type: 'treemap',
+      data: mapData,
+      width: '100%',
+      height: '100%',
+      roam: false,
+      nodeClick: 'link',
+      breadcrumb: { show: false },
+      label: {
+        show: true,
+        formatter: '{b}',
+        fontSize: 10
+      },
+      itemStyle: {
+        borderColor: '#fff',
+        borderWidth: 2,
+        gapWidth: 2
+      },
+      levels: [{
+        itemStyle: {
+          borderColor: '#1976D2',
+          borderWidth: 2,
+          gapWidth: 2
+        },
+        colorSaturation: [0.3, 0.6],
+        colorMappingBy: 'value'
+      }]
+    }]
+  };
   
-  try {
-    const response = await axios.get(`/api/v1/analytics/district/${selectedDistrict.value.name}`, {
-      params: { year: selectedYear.value, quarter }
-    });
-    selectedDistrict.value.quarterData = response.data;
-  } catch (e) {
-    // Mock данные
-    const baseValue = selectedDistrict.value.fact / 4;
-    if (quarter === 'year') {
-      selectedDistrict.value.quarterData = {
-        fact: selectedDistrict.value.fact,
-        plan: selectedDistrict.value.plan
-      };
-    } else {
-      selectedDistrict.value.quarterData = {
-        fact: baseValue * (0.8 + Math.random() * 0.4),
-        plan: selectedDistrict.value.plan / 4
-      };
+  mapChart.setOption(option);
+  
+  mapChart.on('click', (params) => {
+    if (params.data) {
+      openDistrictDialog(params.data);
     }
+  });
+};
+
+const openDistrictDialog = (data) => {
+  const districtInfo = districtsData.value.find(d => d.name === data.name) || {};
+  
+  selectedDistrict.value = {
+    name: data.name,
+    orgCount: data.orgCount || districtInfo.orgCount || 0,
+    fact: data.fact || data.value || 0,
+    plan: data.plan || districtInfo.plan || 0,
+    execution: data.plan > 0 
+      ? Math.round((data.fact / data.plan) * 100) 
+      : 0,
+    quarters: quarterlyData.value.map(q => 
+      Math.round((districtInfo.value || 0) / 4 * (0.8 + Math.random() * 0.4))
+    )
+  };
+  districtDialog.value = true;
+};
+
+// Инициализация графика
+const initChart = () => {
+  if (!chartContainer.value) return;
+  
+  if (barChart) {
+    barChart.dispose();
   }
+  
+  barChart = echarts.init(chartContainer.value);
+  updateChart();
+};
+
+const updateChart = () => {
+  if (!barChart) return;
+  
+  let option;
+  
+  if (chartMode.value === 'years') {
+    option = {
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'shadow' },
+        formatter: (params) => {
+          let result = `<strong>${params[0].name}</strong><br/>`;
+          params.forEach(p => {
+            result += `${p.marker} ${p.seriesName}: ${formatMoney(p.value)}<br/>`;
+          });
+          return result;
+        }
+      },
+      legend: {
+        data: ['ФАКТ', 'ПЛАН'],
+        bottom: 0
+      },
+      grid: {
+        left: '3%',
+        right: '4%',
+        bottom: '15%',
+        top: '10%',
+        containLabel: true
+      },
+      xAxis: {
+        type: 'category',
+        data: yearlyData.value.map(d => d.year)
+      },
+      yAxis: {
+        type: 'value',
+        axisLabel: {
+          formatter: (val) => (val / 1000).toFixed(0) + 'М'
+        }
+      },
+      series: [
+        {
+          name: 'ФАКТ',
+          type: 'bar',
+          data: yearlyData.value.map(d => d.fact),
+          itemStyle: { color: '#4CAF50' },
+          barGap: '10%'
+        },
+        {
+          name: 'ПЛАН',
+          type: 'bar',
+          data: yearlyData.value.map(d => d.plan),
+          itemStyle: { color: '#F44336' }
+        }
+      ]
+    };
+  } else {
+    option = {
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'shadow' },
+        formatter: (params) => {
+          let result = `<strong>${params[0].name} ${selectedYear.value}</strong><br/>`;
+          params.forEach(p => {
+            result += `${p.marker} ${p.seriesName}: ${formatMoney(p.value)}<br/>`;
+          });
+          return result;
+        }
+      },
+      legend: {
+        data: ['ФАКТ', 'ПЛАН'],
+        bottom: 0
+      },
+      grid: {
+        left: '3%',
+        right: '4%',
+        bottom: '15%',
+        top: '10%',
+        containLabel: true
+      },
+      xAxis: {
+        type: 'category',
+        data: quarterlyData.value.map(d => d.quarter)
+      },
+      yAxis: {
+        type: 'value',
+        axisLabel: {
+          formatter: (val) => (val / 1000).toFixed(0) + 'М'
+        }
+      },
+      series: [
+        {
+          name: 'ФАКТ',
+          type: 'bar',
+          data: quarterlyData.value.map(d => d.fact),
+          itemStyle: { color: '#4CAF50' },
+          barGap: '10%'
+        },
+        {
+          name: 'ПЛАН',
+          type: 'bar',
+          data: quarterlyData.value.map(d => d.plan),
+          itemStyle: { color: '#F44336' }
+        }
+      ]
+    };
+  }
+  
+  barChart.setOption(option);
+};
+
+// Следим за изменением режима графика
+watch(chartMode, () => {
+  updateChart();
 });
+
+// Ресайз
+const handleResize = () => {
+  mapChart?.resize();
+  barChart?.resize();
+};
 
 onMounted(() => {
   loadData();
+  window.addEventListener('resize', handleResize);
 });
 </script>
 
