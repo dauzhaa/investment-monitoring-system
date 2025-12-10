@@ -212,7 +212,7 @@ const tyumenGeoJson = {
     {"type": "Feature", "properties": {"name": "Уватский район"}, "geometry": {"type": "Polygon", "coordinates": [[[68.0, 59.0], [71.0, 59.0], [71.0, 61.0], [68.0, 61.0], [68.0, 59.0]]]}},
     {"type": "Feature", "properties": {"name": "Упоровский район"}, "geometry": {"type": "Polygon", "coordinates": [[[66.0, 55.5], [67.5, 55.5], [67.5, 56.3], [66.0, 56.3], [66.0, 55.5]]]}},
     {"type": "Feature", "properties": {"name": "Юргинский район"}, "geometry": {"type": "Polygon", "coordinates": [[[68.0, 56.5], [69.5, 56.5], [69.5, 57.2], [68.0, 57.2], [68.0, 56.5]]]}},
-    {"type": "Feature", "properties": {"name": "Ярковский район"}, "geometry": {"type": "Polygon", "coordinates": [[[68.5, 57.0], [70.0, 57.0], [70.0, 57.8], [68.5, 57.8], [68.5, 57.0]]}}}
+    {"type": "Feature", "properties": {"name": "Ярковский район"}, "geometry": {"type": "Polygon", "coordinates": [[[68.5, 57.0], [70.0, 57.0], [70.0, 57.8], [68.5, 57.8], [68.5, 57.0]]]}}
   ]
 };
 
