@@ -1,184 +1,282 @@
 <template>
-  <v-container>
-    <h1 class="text-h4 font-weight-bold mb-4">Реестр организаций</h1>
-    
-    <!-- Счетчик организаций -->
-    <v-alert type="info" variant="tonal" class="mb-4">
-      <strong>{{ filteredItems.length }}</strong> организаций на текущую дату ({{ currentDateFormatted }})
-    </v-alert>
+  <div>
+    <h1 class="text-h4 font-weight-bold mb-6">Реестр организаций</h1>
 
     <!-- Панель фильтров -->
-    <v-card class="mb-4 pa-4">
-      <v-row>
-        <!-- Поиск -->
-        <v-col cols="12" md="4">
+    <v-card class="mb-4 pa-4" elevation="2">
+      <v-row align="center">
+        <v-col cols="12" sm="6" md="4">
           <v-text-field
             v-model="search"
             label="Поиск (ИНН, Название)"
-            prepend-inner-icon="mdi-magnify"
             variant="outlined"
-            density="comfortable"
+            density="compact"
             hide-details
+            prepend-inner-icon="mdi-magnify"
             clearable
           ></v-text-field>
         </v-col>
-
-        <!-- Фильтр СМП -->
-        <v-col cols="12" md="2">
-          <v-select
-            v-model="smpFilter"
-            :items="smpOptions"
-            label="СМП"
-            variant="outlined"
-            density="comfortable"
-            hide-details
-            clearable
-          ></v-select>
-        </v-col>
-
-        <!-- Выбор года -->
-        <v-col cols="12" md="2">
+        <v-col cols="12" sm="6" md="2">
           <v-select
             v-model="selectedYear"
             :items="availableYears"
             label="Год"
             variant="outlined"
-            density="comfortable"
+            density="compact"
             hide-details
+            @update:model-value="loadData"
           ></v-select>
         </v-col>
-
-        <!-- Фильтр по районам (множественный выбор) -->
-        <v-col cols="12" md="4">
-          <v-select
-            v-model="selectedDistricts"
-            :items="allDistricts"
-            label="Районы"
-            variant="outlined"
-            density="comfortable"
-            hide-details
-            multiple
-            chips
-            closable-chips
-            clearable
-          >
-            <template v-slot:prepend-item>
-              <v-list-item
-                title="Выбрать все"
-                @click="toggleSelectAllDistricts"
-              >
-                <template v-slot:prepend>
-                  <v-checkbox-btn
-                    :model-value="allDistrictsSelected"
-                    :indeterminate="someDistrictsSelected && !allDistrictsSelected"
-                  ></v-checkbox-btn>
-                </template>
-              </v-list-item>
-              <v-divider class="mt-2"></v-divider>
-            </template>
-
-            <template v-slot:selection="{ item, index }">
-              <v-chip v-if="index < 2" size="small" closable @click:close="removeDistrict(item.value)">
-                {{ item.title }}
-              </v-chip>
-              <span v-if="index === 2" class="text-grey text-caption align-self-center">
-                (+{{ selectedDistricts.length - 2 }} ещё)
-              </span>
-            </template>
-          </v-select>
-        </v-col>
-      </v-row>
-
-      <!-- Кнопки действий -->
-      <v-row class="mt-2">
-        <v-col cols="12">
-          <v-btn color="primary" variant="outlined" class="mr-2" @click="resetFilters">
-            <v-icon start>mdi-filter-off</v-icon>
-            Сбросить фильтры
+        <v-col cols="auto">
+          <v-btn color="primary" variant="outlined" @click="showFilterDialog = true">
+            <v-icon start>mdi-filter-variant</v-icon>
+            Фильтры
+            <v-badge
+              v-if="activeFiltersCount > 0"
+              :content="activeFiltersCount"
+              color="red"
+              inline
+              class="ml-2"
+            quier></v-badge>
           </v-btn>
-          <v-btn color="success" variant="outlined" @click="exportToExcel">
-            <v-icon start>mdi-file-excel</v-icon>
-            Скачать отчёт по районам
+        </v-col>
+        <v-col cols="auto">
+          <v-btn variant="text" @click="resetAllFilters" :disabled="activeFiltersCount === 0">
+            <v-icon start>mdi-filter-off</v-icon>
+            Сбросить
           </v-btn>
         </v-col>
       </v-row>
     </v-card>
 
-    <!-- Таблица организаций -->
-    <v-data-table
-      :headers="headers"
-      :items="filteredItems"
-      :search="search"
-      :items-per-page="15"
-      :sort-by="[{ key: 'fact_amount', order: sortOrder }]"
-      class="elevation-1"
-    >
-      <template v-slot:top>
-        <v-toolbar flat color="white">
-          <v-toolbar-title>
-            Найдено: {{ filteredItems.length }} организаций
-          </v-toolbar-title>
+    <!-- Результаты -->
+    <v-card elevation="2">
+      <v-card-title class="d-flex align-center">
+        <span>Найдено: {{ filteredOrganizations.length }} организаций</span>
+        <v-spacer></v-spacer>
+        <v-btn-toggle v-model="sortDirection" mandatory density="compact" color="primary">
+          <v-btn value="desc" size="small">
+            <v-icon start size="small">mdi-sort-descending</v-icon>
+            СОРТ ↓
+          </v-btn>
+          <v-btn value="asc" size="small">
+            <v-icon start size="small">mdi-sort-ascending</v-icon>
+            СОРТ ↑
+          </v-btn>
+        </v-btn-toggle>
+      </v-card-title>
+
+      <v-data-table
+        :headers="headers"
+        :items="filteredOrganizations"
+        :items-per-page="10"
+        :search="search"
+        class="elevation-0"
+      >
+        <!-- ФАКТ -->
+        <template v-slot:item.fact_amount="{ item }">
+          <span class="text-green font-weight-medium">
+            {{ formatMoney(item.fact_amount) }}
+          </span>
+        </template>
+
+        <!-- ПЛАН -->
+        <template v-slot:item.plan_amount="{ item }">
+          <span class="text-grey">
+            {{ formatMoney(item.plan_amount) }}
+          </span>
+        </template>
+
+        <!-- СМП -->
+        <template v-slot:item.is_smp="{ item }">
+          <v-chip :color="item.is_smp ? 'blue' : 'grey'" size="small" label>
+            {{ item.is_smp ? 'Да' : 'Нет' }}
+          </v-chip>
+        </template>
+
+        <!-- Статус -->
+        <template v-slot:item.status="{ item }">
+          <v-chip
+            :color="item.status === 'submitted' ? 'green' : 'grey'"
+            size="small"
+            label
+          >
+            {{ item.status === 'submitted' ? 'Сдан' : 'Нет' }}
+          </v-chip>
+        </template>
+
+        <!-- Действия -->
+        <template v-slot:item.actions="{ item }">
+          <v-btn
+            icon
+            size="small"
+            color="primary"
+            variant="text"
+            @click="showOrgDetails(item)"
+          >
+            <v-icon>mdi-eye</v-icon>
+          </v-btn>
+        </template>
+      </v-data-table>
+    </v-card>
+
+    <!-- Диалог расширенных фильтров -->
+    <v-dialog v-model="showFilterDialog" max-width="700">
+      <v-card>
+        <v-card-title>Расширенные фильтры</v-card-title>
+        <v-card-text>
+          <v-row>
+            <!-- Районы -->
+            <v-col cols="12">
+              <div class="text-subtitle-2 mb-2">Районы</div>
+              <v-chip-group v-model="filters.districts" multiple column>
+                <v-chip
+                  v-for="district in allDistricts"
+                  :key="district"
+                  :value="district"
+                  filter
+                  variant="outlined"
+                  size="small"
+                >
+                  {{ district }}
+                </v-chip>
+              </v-chip-group>
+            </v-col>
+
+            <v-divider class="my-4"></v-divider>
+
+            <!-- Статус СМП -->
+            <v-col cols="12" sm="6">
+              <v-select
+                v-model="filters.smp"
+                :items="[
+                  { title: 'Все организации', value: null },
+                  { title: 'Только СМП', value: true },
+                  { title: 'Только не СМП', value: false }
+                ]"
+                item-title="title"
+                item-value="value"
+                label="Статус СМП"
+                variant="outlined"
+                density="compact"
+              ></v-select>
+            </v-col>
+
+            <!-- Статус отчёта -->
+            <v-col cols="12" sm="6">
+              <v-select
+                v-model="filters.reportStatus"
+                :items="[
+                  { title: 'Все', value: null },
+                  { title: 'Сдали отчёт', value: 'submitted' },
+                  { title: 'Не сдали', value: 'not_submitted' }
+                ]"
+                item-title="title"
+                item-value="value"
+                label="Статус отчёта"
+                variant="outlined"
+                density="compact"
+              ></v-select>
+            </v-col>
+
+            <!-- Диапазон инвестиций -->
+            <v-col cols="12" sm="6">
+              <v-text-field
+                v-model.number="filters.minInvestment"
+                label="Мин. инвестиции (тыс. ₽)"
+                variant="outlined"
+                density="compact"
+                type="number"
+              ></v-text-field>
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-text-field
+                v-model.number="filters.maxInvestment"
+                label="Макс. инвестиции (тыс. ₽)"
+                variant="outlined"
+                density="compact"
+                type="number"
+              ></v-text-field>
+            </v-col>
+
+            <!-- ОКВЭД -->
+            <v-col cols="12" sm="6">
+              <v-text-field
+                v-model="filters.okved"
+                label="ОКВЭД (начинается с)"
+                variant="outlined"
+                density="compact"
+                placeholder="85"
+              ></v-text-field>
+            </v-col>
+
+            <!-- Наличие email -->
+            <v-col cols="12" sm="6">
+              <v-select
+                v-model="filters.hasEmail"
+                :items="[
+                  { title: 'Все', value: null },
+                  { title: 'С email', value: true },
+                  { title: 'Без email', value: false }
+                ]"
+                item-title="title"
+                item-value="value"
+                label="Наличие email"
+                variant="outlined"
+                density="compact"
+              ></v-select>
+            </v-col>
+          </v-row>
+        </v-card-text>
+        <v-card-actions>
+          <v-btn @click="resetFilters">Сбросить фильтры</v-btn>
           <v-spacer></v-spacer>
-          <v-btn-toggle v-model="sortOrder" mandatory variant="outlined" density="compact">
-            <v-btn value="asc" size="small">
-              <v-icon>mdi-sort-ascending</v-icon>
-              сорт ↑
-            </v-btn>
-            <v-btn value="desc" size="small">
-              <v-icon>mdi-sort-descending</v-icon>
-              сорт ↓
-            </v-btn>
-          </v-btn-toggle>
-        </v-toolbar>
-      </template>
-
-      <template v-slot:item.is_smp="{ item }">
-        <v-chip :color="item.is_smp ? 'green' : 'grey'" size="small">
-          {{ item.is_smp ? 'Да' : 'Нет' }}
-        </v-chip>
-      </template>
-
-      <template v-slot:item.fact_amount="{ item }">
-        <span :class="item.fact_amount > 0 ? 'text-green font-weight-bold' : 'text-red'">
-          {{ formatMoney(item.fact_amount) }} тыс. ₽
-        </span>
-      </template>
-
-      <template v-slot:item.plan_amount="{ item }">
-        {{ formatMoney(item.plan_amount) }} тыс. ₽
-      </template>
-
-      <template v-slot:item.status="{ item }">
-        <v-chip :color="getStatusColor(item.status)" size="small">
-          {{ item.status || 'Нет данных' }}
-        </v-chip>
-      </template>
-
-      <template v-slot:item.actions="{ item }">
-        <v-btn icon size="small" color="primary" @click="viewDetails(item)">
-          <v-icon>mdi-eye</v-icon>
-        </v-btn>
-      </template>
-    </v-data-table>
+          <v-btn variant="text" @click="showFilterDialog = false">Отмена</v-btn>
+          <v-btn color="primary" @click="applyFilters">Применить</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <!-- Диалог деталей организации -->
-    <v-dialog v-model="detailsDialog" max-width="800">
+    <v-dialog v-model="detailsDialog" max-width="600">
       <v-card v-if="selectedOrg">
         <v-card-title>{{ selectedOrg.name }}</v-card-title>
         <v-card-text>
-          <v-row>
-            <v-col cols="6">
-              <p><strong>ИНН:</strong> {{ selectedOrg.inn }}</p>
-              <p><strong>Район:</strong> {{ selectedOrg.district }}</p>
-              <p><strong>ОКВЭД:</strong> {{ selectedOrg.okved }}</p>
-            </v-col>
-            <v-col cols="6">
-              <p><strong>СМП:</strong> {{ selectedOrg.is_smp ? 'Да' : 'Нет' }}</p>
-              <p><strong>Email:</strong> {{ selectedOrg.email || 'Не указан' }}</p>
-              <p><strong>ФАКТ ({{ selectedYear }}):</strong> {{ formatMoney(selectedOrg.fact_amount) }} тыс. ₽</p>
-              <p><strong>ПЛАН ({{ selectedYear }}):</strong> {{ formatMoney(selectedOrg.plan_amount) }} тыс. ₽</p>
-            </v-col>
-          </v-row>
+          <v-list>
+            <v-list-item>
+              <v-list-item-title>ИНН</v-list-item-title>
+              <v-list-item-subtitle>{{ selectedOrg.inn }}</v-list-item-subtitle>
+            </v-list-item>
+            <v-list-item>
+              <v-list-item-title>ОКПО</v-list-item-title>
+              <v-list-item-subtitle>{{ selectedOrg.okpo || '—' }}</v-list-item-subtitle>
+            </v-list-item>
+            <v-list-item>
+              <v-list-item-title>ОКВЭД</v-list-item-title>
+              <v-list-item-subtitle>{{ selectedOrg.okved || '—' }}</v-list-item-subtitle>
+            </v-list-item>
+            <v-list-item>
+              <v-list-item-title>Район</v-list-item-title>
+              <v-list-item-subtitle>{{ selectedOrg.district }}</v-list-item-subtitle>
+            </v-list-item>
+            <v-list-item>
+              <v-list-item-title>СМП</v-list-item-title>
+              <v-list-item-subtitle>{{ selectedOrg.is_smp ? 'Да' : 'Нет' }}</v-list-item-subtitle>
+            </v-list-item>
+            <v-list-item>
+              <v-list-item-title>Email</v-list-item-title>
+              <v-list-item-subtitle>{{ selectedOrg.email || '—' }}</v-list-item-subtitle>
+            </v-list-item>
+            <v-divider class="my-2"></v-divider>
+            <v-list-item>
+              <v-list-item-title class="text-green">Инвестиции ФАКТ</v-list-item-title>
+              <v-list-item-subtitle class="text-h6 text-green">{{ formatMoney(selectedOrg.fact_amount) }}</v-list-item-subtitle>
+            </v-list-item>
+            <v-list-item>
+              <v-list-item-title class="text-red">Инвестиции ПЛАН</v-list-item-title>
+              <v-list-item-subtitle class="text-h6 text-red">{{ formatMoney(selectedOrg.plan_amount) }}</v-list-item-subtitle>
+            </v-list-item>
+          </v-list>
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
@@ -186,7 +284,7 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
-  </v-container>
+  </div>
 </template>
 
 <script setup>
@@ -195,206 +293,174 @@ import axios from 'axios';
 
 // Состояние
 const search = ref('');
-const smpFilter = ref(null);
-const selectedYear = ref(new Date().getFullYear());
-const selectedDistricts = ref([]);
-const sortOrder = ref('desc');
-const items = ref([]);
+const selectedYear = ref(2022);
+const sortDirection = ref('desc');
+const showFilterDialog = ref(false);
 const detailsDialog = ref(false);
 const selectedOrg = ref(null);
 
-// Опции
-const smpOptions = [
-  { title: 'СМП', value: true },
-  { title: 'Не СМП', value: false }
+const availableYears = [2025, 2024, 2023, 2022];
+
+const allDistricts = [
+  'г. Тюмень', 'г. Тобольск', 'г. Ишим', 'г. Ялуторовск', 'г. Заводоуковск',
+  'Абатский район', 'Армизонский район', 'Аромашевский район', 'Бердюжский район',
+  'Вагайский район', 'Викуловский район', 'Голышмановский район', 'Заводоуковский район',
+  'Исетский район', 'Ишимский район', 'Казанский район', 'Нижнетавдинский район',
+  'Омутинский район', 'Сладковский район', 'Сорокинский район', 'Тобольский район',
+  'Тюменский район', 'Уватский район', 'Упоровский район', 'Юргинский район', 'Ярковский район'
 ];
 
-const currentYear = new Date().getFullYear();
-const availableYears = computed(() => {
-  const years = [];
-  for (let y = currentYear; y >= 2022; y--) {
-    years.push(y);
-  }
-  return years;
+// Фильтры
+const filters = ref({
+  districts: [],
+  smp: null,
+  reportStatus: null,
+  minInvestment: null,
+  maxInvestment: null,
+  okved: '',
+  hasEmail: null
 });
 
-// Текущая дата
-const currentDateFormatted = computed(() => {
-  return new Date().toLocaleDateString('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric'
-  });
-});
-
-// Список всех районов
-const allDistricts = ref([
-  'Абатский район',
-  'Армизонский район',
-  'Аромашевский район',
-  'Бердюжский район',
-  'Вагайский район',
-  'Викуловский район',
-  'Голышмановский район',
-  'Заводоуковский район',
-  'Исетский район',
-  'Ишимский район',
-  'Казанский район',
-  'Нижнетавдинский район',
-  'Омутинский район',
-  'Сладковский район',
-  'Сорокинский район',
-  'Тобольский район',
-  'Тюменский район',
-  'Уватский район',
-  'Упоровский район',
-  'Юргинский район',
-  'Ялуторовский район',
-  'Ярковский район',
-  'г. Заводоуковск',
-  'г. Ишим',
-  'г. Тобольск',
-  'г. Тюмень',
-  'г. Ялуторовск'
-]);
-
-// Проверка выбора всех районов
-const allDistrictsSelected = computed(() => {
-  return selectedDistricts.value.length === allDistricts.value.length;
-});
-
-const someDistrictsSelected = computed(() => {
-  return selectedDistricts.value.length > 0;
-});
+// Данные
+const organizations = ref([]);
 
 // Заголовки таблицы
 const headers = [
-  { title: 'Наименование', key: 'name', sortable: true },
-  { title: 'ИНН', key: 'inn', sortable: true },
-  { title: 'Район', key: 'district', sortable: true },
-  { title: 'ОКВЭД', key: 'okved', sortable: true },
-  { title: 'СМП', key: 'is_smp', sortable: true },
-  { title: 'ФАКТ', key: 'fact_amount', sortable: true },
-  { title: 'ПЛАН', key: 'plan_amount', sortable: true },
-  { title: 'Статус', key: 'status', sortable: true },
-  { title: '', key: 'actions', sortable: false }
+  { title: 'Наименование', key: 'name', width: '30%' },
+  { title: 'ИНН', key: 'inn', width: '12%' },
+  { title: 'Район', key: 'district', width: '15%' },
+  { title: 'ОКВЭД', key: 'okved', width: '8%' },
+  { title: 'СМП', key: 'is_smp', width: '7%', align: 'center' },
+  { title: 'ФАКТ', key: 'fact_amount', width: '12%', align: 'end' },
+  { title: 'ПЛАН', key: 'plan_amount', width: '10%', align: 'end' },
+  { title: 'Статус', key: 'status', width: '8%', align: 'center' },
+  { title: '', key: 'actions', width: '5%', sortable: false }
 ];
 
-// Отфильтрованные элементы
-const filteredItems = computed(() => {
-  let result = [...items.value];
+// Количество активных фильтров
+const activeFiltersCount = computed(() => {
+  let count = 0;
+  if (filters.value.districts.length > 0) count++;
+  if (filters.value.smp !== null) count++;
+  if (filters.value.reportStatus !== null) count++;
+  if (filters.value.minInvestment) count++;
+  if (filters.value.maxInvestment) count++;
+  if (filters.value.okved) count++;
+  if (filters.value.hasEmail !== null) count++;
+  return count;
+});
 
-  // Фильтр по СМП
-  if (smpFilter.value !== null) {
-    result = result.filter(item => item.is_smp === smpFilter.value);
-  }
-
+// Отфильтрованные организации
+const filteredOrganizations = computed(() => {
+  let result = [...organizations.value];
+  
   // Фильтр по районам
-  if (selectedDistricts.value.length > 0) {
-    result = result.filter(item => selectedDistricts.value.includes(item.district));
+  if (filters.value.districts.length > 0) {
+    result = result.filter(org => filters.value.districts.includes(org.district));
   }
-
+  
+  // Фильтр по СМП
+  if (filters.value.smp !== null) {
+    result = result.filter(org => org.is_smp === filters.value.smp);
+  }
+  
+  // Фильтр по статусу отчёта
+  if (filters.value.reportStatus !== null) {
+    if (filters.value.reportStatus === 'submitted') {
+      result = result.filter(org => org.status === 'submitted');
+    } else {
+      result = result.filter(org => org.status !== 'submitted');
+    }
+  }
+  
+  // Фильтр по мин. инвестициям
+  if (filters.value.minInvestment) {
+    result = result.filter(org => org.fact_amount >= filters.value.minInvestment);
+  }
+  
+  // Фильтр по макс. инвестициям
+  if (filters.value.maxInvestment) {
+    result = result.filter(org => org.fact_amount <= filters.value.maxInvestment);
+  }
+  
+  // Фильтр по ОКВЭД
+  if (filters.value.okved) {
+    result = result.filter(org => org.okved && org.okved.startsWith(filters.value.okved));
+  }
+  
+  // Фильтр по email
+  if (filters.value.hasEmail !== null) {
+    result = result.filter(org => filters.value.hasEmail ? !!org.email : !org.email);
+  }
+  
   // Сортировка
-  if (sortOrder.value === 'asc') {
-    result.sort((a, b) => a.fact_amount - b.fact_amount);
-  } else {
-    result.sort((a, b) => b.fact_amount - a.fact_amount);
-  }
-
+  result.sort((a, b) => {
+    if (sortDirection.value === 'desc') {
+      return b.fact_amount - a.fact_amount;
+    }
+    return a.fact_amount - b.fact_amount;
+  });
+  
   return result;
 });
 
-// Методы
+// Форматирование денег
 const formatMoney = (value) => {
-  if (!value) return '0';
-  return value.toLocaleString('ru-RU');
-};
-
-const getStatusColor = (status) => {
-  if (status === 'Сдан') return 'green';
-  if (status === 'Просрочен') return 'red';
-  return 'grey';
-};
-
-const toggleSelectAllDistricts = () => {
-  if (allDistrictsSelected.value) {
-    selectedDistricts.value = [];
-  } else {
-    selectedDistricts.value = [...allDistricts.value];
-  }
-};
-
-const removeDistrict = (district) => {
-  const index = selectedDistricts.value.indexOf(district);
-  if (index > -1) {
-    selectedDistricts.value.splice(index, 1);
-  }
-};
-
-const resetFilters = () => {
-  search.value = '';
-  smpFilter.value = null;
-  selectedDistricts.value = [];
-};
-
-const viewDetails = (item) => {
-  selectedOrg.value = item;
-  detailsDialog.value = true;
-};
-
-const exportToExcel = () => {
-  // Формируем параметры для скачивания
-  const districts = selectedDistricts.value.length > 0 
-    ? selectedDistricts.value.join(',') 
-    : '';
-  const smp = smpFilter.value !== null ? smpFilter.value : '';
-  
-  const url = `/api/v1/organizations/export?year=${selectedYear.value}&districts=${encodeURIComponent(districts)}&smp=${smp}`;
-  window.open(url, '_blank');
+  if (!value) return '0 тыс. ₽';
+  return value.toLocaleString('ru-RU') + ' тыс. ₽';
 };
 
 // Загрузка данных
-const fetchData = async () => {
+const loadData = async () => {
   try {
-    const res = await axios.get(`/api/v1/organizations?year=${selectedYear.value}`);
-    if (res.data) {
-      items.value = res.data.map(org => ({
-        id: org.id,
-        name: org.name,
-        inn: org.inn,
-        district: org.district?.name || org.municipality || 'Не указан',
-        okved: org.okved?.code || '',
-        is_smp: org.is_smp || false,
-        email: org.contact_email,
-        fact_amount: org.fact_amount || org.total_investment || 0,
-        plan_amount: org.plan_amount || org.forecast || 0,
-        status: org.status || 'Нет данных'
-      }));
-    }
+    const response = await axios.get('/api/v1/organizations', {
+      params: { year: selectedYear.value }
+    });
+    organizations.value = response.data;
   } catch (e) {
-    console.log('Using mock organization data');
-    // Заглушка
-    items.value = [
-      { id: 1, name: 'ГАОУ ТО "ФМШ"', inn: '7203346712', district: 'г. Тюмень', okved: '85.13', is_smp: false, email: 'fmschool72@mail.ru', fact_amount: 3891, plan_amount: 4000, status: 'Сдан' },
-      { id: 2, name: 'ГАПОУ ТО "ГОЛЫШМАНОВСКИЙ АГРОПЕДКОЛЛЕДЖ"', inn: '7214007895', district: 'Голышмановский район', okved: '85.21', is_smp: false, email: 'agpc@yandex.ru', fact_amount: 4978, plan_amount: 5000, status: 'Сдан' },
-      { id: 3, name: 'АНО УМЦ ДПО "СТАТУС"', inn: '8603146212', district: 'г. Тюмень', okved: '85.42', is_smp: true, email: 'aupstatus@bk.ru', fact_amount: 2563, plan_amount: 3000, status: 'Сдан' },
-      { id: 4, name: 'АДОУ "ЮРГИНСКИЙ ДЕТСКИЙ САД"', inn: '7227262282', district: 'Юргинский район', okved: '85.11', is_smp: false, email: 'adou-urga@mail.ru', fact_amount: 369, plan_amount: 400, status: 'Сдан' },
-      { id: 5, name: 'ГАПОУ ТО "АТК"', inn: '7207006570', district: 'г. Ялуторовск', okved: '85.21', is_smp: false, email: 'yalagrokoll@mail.ru', fact_amount: 0, plan_amount: 0, status: 'Просрочен' }
+    // Mock данные
+    organizations.value = [
+      { id: 1, name: 'МАОУ АРМИЗОНСКАЯ СОШ', inn: '7209002556', district: 'Армизонский район', okved: '85.13', is_smp: false, email: 'school_arm@mail.ru', fact_amount: 8129, plan_amount: 4632, status: 'submitted' },
+      { id: 2, name: 'МАОУ СОШ №40 ГОРОДА ТЮМЕНИ', inn: '7202045134', district: 'г. Тюмень', okved: '85.13', is_smp: false, email: 'school40@edu72.ru', fact_amount: 8086, plan_amount: 4718, status: 'submitted' },
+      { id: 3, name: 'ГАПОУ ТО "АТК"', inn: '7207006570', district: 'г. Ялуторовск', okved: '85.21', is_smp: false, email: 'yalagrokoll@mail.ru', fact_amount: 7854, plan_amount: 4611, status: 'submitted' },
+      { id: 4, name: 'МАДОУ Д/С № 149 ГОРОДА ТЮМЕНИ', inn: '7203206909', district: 'г. Тюмень', okved: '85.11', is_smp: false, email: 'ds149@mail.ru', fact_amount: 7655, plan_amount: 4971, status: 'submitted' },
+      { id: 5, name: 'ГАПОУ ТО "ТКПСТ"', inn: '7203489252', district: 'г. Тюмень', okved: '85.21', is_smp: false, email: 'tkpst@mail.ru', fact_amount: 6953, plan_amount: 4145, status: 'submitted' },
+      { id: 6, name: 'МАОУ ПЯТКОВСКАЯ СОШ', inn: '7226002926', district: 'Упоровский район', okved: '85.13', is_smp: false, email: 'piatk_school@mail.ru', fact_amount: 6921, plan_amount: 4747, status: 'submitted' },
+      { id: 7, name: 'МАОУ ГИМНАЗИЯ № 21 ГОРОДА ТЮМЕНИ', inn: '7202041838', district: 'г. Тюмень', okved: '85.14', is_smp: false, email: 'gym21@edu72.ru', fact_amount: 6703, plan_amount: 3871, status: 'submitted' },
+      { id: 8, name: 'МАДОУ Д/С № 92 ГОРОДА ТЮМЕНИ', inn: '7203207010', district: 'г. Тюмень', okved: '85.11', is_smp: false, email: 'ds92@mail.ru', fact_amount: 6569, plan_amount: 4947, status: 'submitted' },
+      { id: 9, name: 'МАОУ "БИГИЛИНСКАЯ СОШ"', inn: '7215008010', district: 'Заводоуковский район', okved: '85.13', is_smp: false, email: 'bigilin@mail.ru', fact_amount: 6493, plan_amount: 4040, status: 'submitted' },
+      { id: 10, name: 'МАОУ ЧЕРЕМШАНСКАЯ СОШ', inn: '7205010193', district: 'Ишимский район', okved: '85.13', is_smp: false, email: 'cheremshan@mail.ru', fact_amount: 6431, plan_amount: 4337, status: 'submitted' },
     ];
-  }
-
-  // Загрузка списка районов
-  try {
-    const distRes = await axios.get('/api/v1/dictionaries/districts');
-    if (distRes.data) {
-      allDistricts.value = distRes.data.map(d => d.name);
-    }
-  } catch (e) {
-    console.log('Using default districts list');
   }
 };
 
+const applyFilters = () => {
+  showFilterDialog.value = false;
+};
+
+const resetFilters = () => {
+  filters.value = {
+    districts: [],
+    smp: null,
+    reportStatus: null,
+    minInvestment: null,
+    maxInvestment: null,
+    okved: '',
+    hasEmail: null
+  };
+};
+
+const resetAllFilters = () => {
+  resetFilters();
+  search.value = '';
+};
+
+const showOrgDetails = (org) => {
+  selectedOrg.value = org;
+  detailsDialog.value = true;
+};
+
 onMounted(() => {
-  fetchData();
+  loadData();
 });
 </script>

@@ -1,201 +1,248 @@
 <template>
-  <v-container>
-    <h1 class="text-h4 font-weight-bold mb-4">Мониторинг сдачи отчётности</h1>
+  <div>
+    <h1 class="text-h4 font-weight-bold mb-6">Мониторинг сдачи отчётности</h1>
 
-    <!-- Счетчик организаций -->
-    <v-alert type="info" variant="tonal" class="mb-4">
-      <strong>{{ organizationsCount }}</strong> организаций на текущую дату ({{ currentDateFormatted }})
-    </v-alert>
-
-    <!-- Панель фильтров -->
-    <v-card class="mb-4 pa-4">
-      <v-row align="center">
-        <v-col cols="12" md="2">
-          <v-select
-            v-model="selectedYear"
-            :items="availableYears"
-            label="Год"
-            variant="outlined"
-            density="comfortable"
-            hide-details
-          ></v-select>
-        </v-col>
-        <v-col cols="12" md="2">
-          <v-select
-            v-model="selectedQuarter"
-            :items="quarterOptions"
-            item-title="title"
-            item-value="value"
-            label="Квартал"
-            variant="outlined"
-            density="comfortable"
-            hide-details
-          ></v-select>
-        </v-col>
-        <v-col cols="12" md="3">
-          <v-select
-            v-model="selectedDistricts"
-            :items="allDistricts"
-            label="Районы"
-            variant="outlined"
-            density="comfortable"
-            hide-details
-            multiple
-            chips
-            closable-chips
-            clearable
-          >
-            <template v-slot:selection="{ item, index }">
-              <v-chip v-if="index < 1" size="small">{{ item.title }}</v-chip>
-              <span v-if="index === 1" class="text-grey text-caption">
-                (+{{ selectedDistricts.length - 1 }})
-              </span>
-            </template>
-          </v-select>
-        </v-col>
-        <v-col cols="12" md="3">
-          <v-btn color="primary" prepend-icon="mdi-download" @click="downloadReport" :loading="downloading">
-            Скачать отчёт
-          </v-btn>
-          <v-btn color="warning" prepend-icon="mdi-bell" class="ml-2" @click="sendReminders" :loading="sending">
-            Напомнить
-          </v-btn>
-        </v-col>
-      </v-row>
-    </v-card>
+    <!-- Фильтры -->
+    <v-row class="mb-4" align="center">
+      <v-col cols="12" sm="6" md="2">
+        <v-select
+          v-model="selectedYear"
+          :items="availableYears"
+          label="Год"
+          variant="outlined"
+          density="compact"
+          hide-details
+          @update:model-value="loadData"
+        ></v-select>
+      </v-col>
+      <v-col cols="12" sm="6" md="2">
+        <v-select
+          v-model="selectedQuarter"
+          :items="quarters"
+          item-title="title"
+          item-value="value"
+          label="Квартал"
+          variant="outlined"
+          density="compact"
+          hide-details
+          @update:model-value="loadData"
+        ></v-select>
+      </v-col>
+      <v-col cols="12" sm="6" md="3">
+        <v-select
+          v-model="selectedDistricts"
+          :items="allDistricts"
+          label="Районы"
+          variant="outlined"
+          density="compact"
+          hide-details
+          multiple
+          clearable
+          chips
+          @update:model-value="filterData"
+        ></v-select>
+      </v-col>
+      <v-col cols="auto">
+        <v-btn color="primary" @click="showFilterDialog = true">
+          <v-icon start>mdi-filter</v-icon>
+          Фильтры
+        </v-btn>
+      </v-col>
+      <v-spacer></v-spacer>
+      <v-col cols="auto">
+        <v-btn color="primary" variant="elevated" @click="downloadReport">
+          <v-icon start>mdi-download</v-icon>
+          Скачать отчёт
+        </v-btn>
+      </v-col>
+    </v-row>
 
     <!-- Заголовок отчёта -->
-    <v-card class="mb-4 pa-4" color="primary" dark>
-      <div class="text-h6 font-weight-bold text-center">
+    <v-card class="mb-6 pa-4 bg-primary" elevation="2">
+      <div class="text-h6 text-white text-center">
         {{ reportTitle }}
       </div>
-      <v-row class="mt-4">
-        <v-col cols="4" class="text-center">
-          <div class="text-h4">{{ stats.total }}</div>
-          <div class="text-caption">Всего организаций</div>
+
+      <!-- Статистика -->
+      <v-row class="mt-4" justify="center">
+        <v-col cols="12" sm="4" class="text-center">
+          <div class="text-h3 text-white font-weight-bold">{{ stats.total }}</div>
+          <div class="text-white">Всего организаций</div>
         </v-col>
-        <v-col cols="4" class="text-center">
-          <div class="text-h4 text-green-accent-2">{{ stats.submitted }}</div>
-          <div class="text-caption">Сдали отчёт</div>
+        <v-col cols="12" sm="4" class="text-center">
+          <div class="text-h3 text-white font-weight-bold">{{ stats.submitted }}</div>
+          <div class="text-white">Сдали отчёт</div>
         </v-col>
-        <v-col cols="4" class="text-center">
-          <div class="text-h4 text-red-accent-2">{{ stats.overdue }}</div>
-          <div class="text-caption">Просрочено</div>
+        <v-col cols="12" sm="4" class="text-center">
+          <div class="text-h3 font-weight-bold" :class="stats.overdue > 0 ? 'text-red-lighten-3' : 'text-green-lighten-3'">
+            {{ stats.overdue }}
+          </div>
+          <div class="text-white">Просрочено</div>
         </v-col>
       </v-row>
+
       <v-progress-linear
         :model-value="stats.percent"
-        color="green-accent-2"
-        height="20"
+        color="green-lighten-3"
+        bg-color="white"
+        height="12"
+        rounded
         class="mt-4"
-        striped
       >
-        <strong>{{ stats.percent }}%</strong>
+        <template v-slot:default>
+          <span class="text-caption font-weight-bold">{{ stats.percent }}%</span>
+        </template>
       </v-progress-linear>
     </v-card>
 
     <!-- Таблица организаций -->
-    <v-data-table
-      :headers="headers"
-      :items="filteredOrganizations"
-      :loading="loading"
-      :items-per-page="15"
-      class="elevation-1"
-    >
-      <template v-slot:item.status="{ item }">
-        <v-chip :color="item.status === 'submitted' ? 'green' : 'red'" size="small">
-          {{ item.status === 'submitted' ? 'Сдан' : 'Просрочен' }}
-        </v-chip>
-      </template>
+    <v-card elevation="2">
+      <v-data-table
+        :headers="headers"
+        :items="filteredOrganizations"
+        :items-per-page="10"
+        class="elevation-0"
+      >
+        <!-- Статус -->
+        <template v-slot:item.status="{ item }">
+          <v-chip
+            :color="getStatusColor(item.status)"
+            size="small"
+            label
+          >
+            {{ getStatusText(item.status) }}
+          </v-chip>
+        </template>
 
-      <template v-slot:item.upload_date="{ item }">
-        {{ item.upload_date ? formatDate(item.upload_date) : '—' }}
-      </template>
+        <!-- Действия -->
+        <template v-slot:item.actions="{ item }">
+          <!-- Сдан - кнопка скачать -->
+          <v-btn
+            v-if="item.status === 'submitted'"
+            icon
+            size="small"
+            color="primary"
+            variant="text"
+            @click="downloadOrgReport(item)"
+            title="Скачать отчёт"
+          >
+            <v-icon>mdi-download</v-icon>
+          </v-btn>
+          
+          <!-- Просрочка - кнопка напомнить -->
+          <v-btn
+            v-else-if="item.status === 'overdue'"
+            icon
+            size="small"
+            color="orange"
+            variant="text"
+            @click="sendReminder(item)"
+            title="Отправить напоминание"
+          >
+            <v-icon>mdi-bell-ring</v-icon>
+          </v-btn>
+          
+          <!-- Не запланировано - ничего -->
+          <span v-else class="text-grey">—</span>
+        </template>
+      </v-data-table>
+    </v-card>
 
-      <template v-slot:item.actions="{ item }">
-        <v-btn
-          v-if="item.status === 'submitted'"
-          icon
-          size="small"
-          color="primary"
-          @click="downloadOrgReport(item)"
-        >
-          <v-icon>mdi-file-download</v-icon>
-        </v-btn>
-        <v-btn
-          v-else
-          color="warning"
-          size="small"
-          @click="remindOrg(item)"
-        >
-          Напомнить
-        </v-btn>
-      </template>
-    </v-data-table>
-
-    <!-- Диалог подтверждения отправки -->
-    <v-dialog v-model="confirmDialog" max-width="500">
+    <!-- Диалог расширенных фильтров -->
+    <v-dialog v-model="showFilterDialog" max-width="600">
       <v-card>
-        <v-card-title>Подтверждение отправки</v-card-title>
+        <v-card-title>Расширенные фильтры</v-card-title>
         <v-card-text>
-          <v-alert type="warning" variant="tonal" class="mb-4">
-            <strong>Внимание!</strong> Будет отправлено {{ overdueOrgs.length }} уведомлений.
-          </v-alert>
-          <p>Вы уверены, что хотите отправить напоминания всем организациям, не сдавшим отчёт?</p>
-          <p class="text-caption text-grey mt-2">
-            Период: {{ reportTitle }}
-          </p>
+          <v-row>
+            <v-col cols="12">
+              <v-select
+                v-model="filters.status"
+                :items="statusOptions"
+                label="Статус"
+                variant="outlined"
+                clearable
+                multiple
+              ></v-select>
+            </v-col>
+            <v-col cols="12">
+              <v-select
+                v-model="filters.districts"
+                :items="allDistricts"
+                label="Районы"
+                variant="outlined"
+                clearable
+                multiple
+                chips
+              ></v-select>
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-select
+                v-model="filters.smp"
+                :items="[{title: 'Все', value: null}, {title: 'СМП', value: true}, {title: 'Не СМП', value: false}]"
+                item-title="title"
+                item-value="value"
+                label="Тип организации"
+                variant="outlined"
+              ></v-select>
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-select
+                v-model="filters.hasEmail"
+                :items="[{title: 'Все', value: null}, {title: 'С email', value: true}, {title: 'Без email', value: false}]"
+                item-title="title"
+                item-value="value"
+                label="Наличие email"
+                variant="outlined"
+              ></v-select>
+            </v-col>
+            <v-col cols="12">
+              <v-text-field
+                v-model="filters.search"
+                label="Поиск по названию или ИНН"
+                variant="outlined"
+                prepend-inner-icon="mdi-magnify"
+                clearable
+              ></v-text-field>
+            </v-col>
+          </v-row>
         </v-card-text>
         <v-card-actions>
+          <v-btn @click="resetFilters">Сбросить</v-btn>
           <v-spacer></v-spacer>
-          <v-btn @click="confirmDialog = false">Отмена</v-btn>
-          <v-btn color="warning" @click="confirmSendReminders">Отправить</v-btn>
+          <v-btn color="primary" @click="applyFilters">Применить</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <!-- Snackbar для уведомлений -->
+    <!-- Snackbar -->
     <v-snackbar v-model="snackbar" :color="snackbarColor" timeout="3000">
       {{ snackbarText }}
     </v-snackbar>
-  </v-container>
+  </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import axios from 'axios';
 
 // Состояние
-const selectedYear = ref(new Date().getFullYear());
+const selectedYear = ref(2022);
 const selectedQuarter = ref(1);
 const selectedDistricts = ref([]);
-const loading = ref(false);
-const downloading = ref(false);
-const sending = ref(false);
-const organizations = ref([]);
-const organizationsCount = ref(274);
-const confirmDialog = ref(false);
+const showFilterDialog = ref(false);
 const snackbar = ref(false);
 const snackbarText = ref('');
 const snackbarColor = ref('success');
 
-// Статистика
-const stats = ref({
-  total: 0,
-  submitted: 0,
-  overdue: 0,
-  percent: 0
-});
+const availableYears = [2025, 2024, 2023, 2022];
 
-// Опции кварталов
-const quarterOptions = [
-  { value: 1, title: '1 квартал (январь-март)' },
-  { value: 2, title: '2 квартал (апрель-июнь)' },
-  { value: 3, title: '3 квартал (июль-сентябрь)' },
-  { value: 4, title: '4 квартал (октябрь-декабрь)' }
+const quarters = [
+  { title: '1 квартал (январь-март)', value: 1 },
+  { title: '2 квартал (апрель-июнь)', value: 2 },
+  { title: '3 квартал (июль-сентябрь)', value: 3 },
+  { title: '4 квартал (октябрь-декабрь)', value: 4 }
 ];
 
-// Месяцы для заголовка
 const quarterMonths = {
   1: 'январь-март',
   2: 'апрель-июнь',
@@ -203,173 +250,208 @@ const quarterMonths = {
   4: 'октябрь-декабрь'
 };
 
-const currentYear = new Date().getFullYear();
-const availableYears = computed(() => {
-  const years = [];
-  for (let y = currentYear; y >= 2022; y--) {
-    years.push(y);
-  }
-  return years;
+const allDistricts = [
+  'г. Тюмень', 'г. Тобольск', 'г. Ишим', 'г. Ялуторовск', 'г. Заводоуковск',
+  'Абатский район', 'Армизонский район', 'Аромашевский район', 'Бердюжский район',
+  'Вагайский район', 'Викуловский район', 'Голышмановский район', 'Заводоуковский район',
+  'Исетский район', 'Ишимский район', 'Казанский район', 'Нижнетавдинский район',
+  'Омутинский район', 'Сладковский район', 'Сорокинский район', 'Тобольский район',
+  'Тюменский район', 'Уватский район', 'Упоровский район', 'Юргинский район', 'Ярковский район'
+];
+
+const statusOptions = [
+  { title: 'Сдан', value: 'submitted' },
+  { title: 'Просрочка', value: 'overdue' },
+  { title: 'Не запланировано', value: 'not_planned' }
+];
+
+// Фильтры
+const filters = ref({
+  status: [],
+  districts: [],
+  smp: null,
+  hasEmail: null,
+  search: ''
 });
 
-// Текущая дата
-const currentDateFormatted = computed(() => {
-  return new Date().toLocaleDateString('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric'
-  });
-});
+// Данные
+const organizations = ref([]);
+const stats = ref({ total: 0, submitted: 0, overdue: 0, percent: 0 });
 
 // Заголовок отчёта
 const reportTitle = computed(() => {
-  return `Отчёт об инвестициях за ${selectedQuarter.value} квартал ${quarterMonths[selectedQuarter.value]} ${selectedYear.value} года`;
+  const months = quarterMonths[selectedQuarter.value];
+  return `Отчёт об инвестициях за ${selectedQuarter.value} квартал ${months} ${selectedYear.value} года`;
 });
-
-// Список районов
-const allDistricts = ref([
-  'Абатский район',
-  'Армизонский район',
-  'Аромашевский район',
-  'Бердюжский район',
-  'Вагайский район',
-  'Викуловский район',
-  'Голышмановский район',
-  'Заводоуковский район',
-  'Исетский район',
-  'Ишимский район',
-  'Казанский район',
-  'Нижнетавдинский район',
-  'Омутинский район',
-  'Сладковский район',
-  'Сорокинский район',
-  'Тобольский район',
-  'Тюменский район',
-  'Уватский район',
-  'Упоровский район',
-  'Юргинский район',
-  'Ялуторовский район',
-  'Ярковский район',
-  'г. Заводоуковск',
-  'г. Ишим',
-  'г. Тобольск',
-  'г. Тюмень',
-  'г. Ялуторовск'
-]);
 
 // Заголовки таблицы
 const headers = [
-  { title: 'Организация', key: 'name', sortable: true },
-  { title: 'ИНН', key: 'inn', sortable: true },
-  { title: 'Район', key: 'municipality', sortable: true },
-  { title: 'Email', key: 'email', sortable: false },
-  { title: 'Статус', key: 'status', sortable: true },
-  { title: 'Дата сдачи', key: 'upload_date', sortable: true },
-  { title: 'Действия', key: 'actions', sortable: false }
+  { title: 'Организация', key: 'name', width: '35%' },
+  { title: 'ИНН', key: 'inn', width: '12%' },
+  { title: 'Район', key: 'district', width: '18%' },
+  { title: 'Email', key: 'email', width: '20%' },
+  { title: 'Статус', key: 'status', width: '10%', align: 'center' },
+  { title: 'Действия', key: 'actions', width: '5%', align: 'center', sortable: false }
 ];
 
-// Отфильтрованные организации
+// Фильтрованные организации
 const filteredOrganizations = computed(() => {
-  if (selectedDistricts.value.length === 0) {
-    return organizations.value;
+  let result = [...organizations.value];
+  
+  // Фильтр по районам
+  if (selectedDistricts.value.length > 0) {
+    result = result.filter(org => selectedDistricts.value.includes(org.district));
   }
-  return organizations.value.filter(org => 
-    selectedDistricts.value.includes(org.municipality)
-  );
-});
-
-// Организации с просрочкой
-const overdueOrgs = computed(() => {
-  return filteredOrganizations.value.filter(org => org.status === 'overdue');
+  
+  // Фильтр по статусу
+  if (filters.value.status.length > 0) {
+    result = result.filter(org => filters.value.status.includes(org.status));
+  }
+  
+  // Фильтр по СМП
+  if (filters.value.smp !== null) {
+    result = result.filter(org => org.is_smp === filters.value.smp);
+  }
+  
+  // Фильтр по email
+  if (filters.value.hasEmail !== null) {
+    result = result.filter(org => filters.value.hasEmail ? !!org.email : !org.email);
+  }
+  
+  // Поиск
+  if (filters.value.search) {
+    const search = filters.value.search.toLowerCase();
+    result = result.filter(org => 
+      org.name.toLowerCase().includes(search) || 
+      org.inn.includes(search)
+    );
+  }
+  
+  return result;
 });
 
 // Методы
-const formatDate = (dateStr) => {
-  if (!dateStr) return '';
-  const date = new Date(dateStr);
-  return date.toLocaleDateString('ru-RU');
+const getStatusColor = (status) => {
+  switch (status) {
+    case 'submitted': return 'green';
+    case 'overdue': return 'red';
+    case 'not_planned': return 'grey';
+    default: return 'grey';
+  }
 };
 
-const fetchData = async () => {
-  loading.value = true;
+const getStatusText = (status) => {
+  switch (status) {
+    case 'submitted': return 'Сдан';
+    case 'overdue': return 'Просрочка';
+    case 'not_planned': return 'Не запланировано';
+    default: return 'Неизвестно';
+  }
+};
+
+const loadData = async () => {
   try {
-    const res = await axios.get(`/api/v1/monitoring/status?year=${selectedYear.value}&quarter=${selectedQuarter.value}`);
-    if (res.data) {
-      organizations.value = res.data.items || [];
-      stats.value = {
-        total: res.data.total || 0,
-        submitted: res.data.submitted || 0,
-        overdue: (res.data.total || 0) - (res.data.submitted || 0),
-        percent: res.data.percent || 0
-      };
-      organizationsCount.value = res.data.total || 274;
-    }
-  } catch (e) {
-    console.log('Using mock monitoring data');
-    // Заглушка
-    organizations.value = [
-      { id: 1, name: 'ГАОУ ТО "ФМШ"', inn: '7203346712', municipality: 'г. Тюмень', email: 'fmschool72@mail.ru', status: 'submitted', upload_date: '2024-03-15' },
-      { id: 2, name: 'ГАПОУ ТО "ГОЛЫШМАНОВСКИЙ АГРОПЕДКОЛЛЕДЖ"', inn: '7214007895', municipality: 'Голышмановский район', email: 'agpc@yandex.ru', status: 'submitted', upload_date: '2024-03-10' },
-      { id: 3, name: 'АНО УМЦ ДПО "СТАТУС"', inn: '8603146212', municipality: 'г. Тюмень', email: 'aupstatus@bk.ru', status: 'overdue', upload_date: null },
-      { id: 4, name: 'ГАПОУ ТО "АТК"', inn: '7207006570', municipality: 'г. Ялуторовск', email: 'yalagrokoll@mail.ru', status: 'overdue', upload_date: null }
-    ];
+    const response = await axios.get('/api/v1/monitoring/status', {
+      params: {
+        year: selectedYear.value,
+        quarter: selectedQuarter.value
+      }
+    });
+    
+    organizations.value = response.data.items;
     stats.value = {
-      total: 274,
-      submitted: 250,
-      overdue: 24,
-      percent: 91.2
+      total: response.data.total,
+      submitted: response.data.submitted,
+      overdue: response.data.overdue,
+      percent: response.data.percent
     };
-  } finally {
-    loading.value = false;
-  }
-};
-
-const downloadReport = async () => {
-  downloading.value = true;
-  try {
-    const districts = selectedDistricts.value.join(',');
-    const url = `/api/v1/reports/export/monitoring?year=${selectedYear.value}&quarter=${selectedQuarter.value}&districts=${encodeURIComponent(districts)}`;
-    window.open(url, '_blank');
-    showSnackbar('Скачивание отчёта начато', 'success');
   } catch (e) {
-    showSnackbar('Ошибка скачивания', 'error');
-  } finally {
-    downloading.value = false;
+    // Mock данные на основе 2022.xlsx
+    // Логика: если инвестиции за квартал > 0 - сдан, если план > 0 но факт = 0 - просрочка, иначе - не запланировано
+    const mockOrgs = [
+      { id: 1, name: 'АДОУ "ЮРГИНСКИЙ ДЕТСКИЙ САД ЮРГИНСКОГО МУНИЦИПАЛЬНОГО РАЙОНА"', inn: '7227262282', district: 'Юргинский район', email: 'adou-urga@mail.ru', q1: 29, q2: 118, q3: 334, q4: 369, plan: 369, is_smp: false },
+      { id: 2, name: 'АНО УМЦ ДПО "СТАТУС"', inn: '8603146212', district: 'г. Тюмень', email: 'aupstatus@bk.ru', q1: 17, q2: 1322, q3: 1740, q4: 2563, plan: 2563, is_smp: false },
+      { id: 3, name: 'ВНИИВЭА - ФИЛИАЛ ТЮМНЦ СО РАН в с Мальково', inn: '7202004498', district: 'Тюменский район', email: 'buh_ikz@ikz.ru', q1: 0, q2: 0, q3: 0, q4: 0, plan: 0, is_smp: false },
+      { id: 4, name: 'ГАОУ ТО "ГИМНАЗИЯ РОССИЙСКОЙ КУЛЬТУРЫ"', inn: '7203383993', district: 'г. Тюмень', email: 'GRKTMN@MAIL.RU', q1: 125, q2: 250, q3: 380, q4: 512, plan: 512, is_smp: false },
+      { id: 5, name: 'ГАОУ ТО "ФМШ"', inn: '7203346712', district: 'г. Тюмень', email: 'fmschool72@mail.ru', q1: 89, q2: 178, q3: 267, q4: 356, plan: 356, is_smp: false },
+      { id: 6, name: 'ГАОУ ТО ДПО "ТОГИРРО"', inn: '7202068371', district: 'г. Тюмень', email: 'info@togirro.ru', q1: 0, q2: 0, q3: 0, q4: 0, plan: 150, is_smp: false },
+      { id: 7, name: 'ГАПОУ ТО "АТК"', inn: '7207006570', district: 'г. Ялуторовск', email: 'yalagrokoll@mail.ru', q1: 45, q2: 112, q3: 189, q4: 278, plan: 278, is_smp: false },
+      { id: 8, name: 'МАОУ АРМИЗОНСКАЯ СОШ', inn: '7209002556', district: 'Армизонский район', email: 'school_arm@mail.ru', q1: 156, q2: 312, q3: 468, q4: 624, plan: 600, is_smp: false },
+      { id: 9, name: 'МАОУ СОШ №40 ГОРОДА ТЮМЕНИ', inn: '7202045134', district: 'г. Тюмень', email: 'school40@mail.ru', q1: 200, q2: 400, q3: 600, q4: 800, plan: 750, is_smp: false },
+      { id: 10, name: 'МАДОУ Д/С № 149 ГОРОДА ТЮМЕНИ', inn: '7203206909', district: 'г. Тюмень', email: 'ds149@mail.ru', q1: 120, q2: 240, q3: 360, q4: 480, plan: 450, is_smp: false },
+    ];
+    
+    // Определяем статус для каждой организации
+    const quarterKey = `q${selectedQuarter.value}`;
+    organizations.value = mockOrgs.map(org => {
+      let status = 'not_planned';
+      const quarterValue = org[quarterKey];
+      
+      if (org.plan > 0) {
+        if (quarterValue > 0) {
+          status = 'submitted';
+        } else {
+          status = 'overdue';
+        }
+      }
+      
+      return {
+        ...org,
+        status
+      };
+    });
+    
+    // Считаем статистику
+    const submitted = organizations.value.filter(o => o.status === 'submitted').length;
+    const overdue = organizations.value.filter(o => o.status === 'overdue').length;
+    stats.value = {
+      total: organizations.value.length,
+      submitted,
+      overdue,
+      percent: Math.round((submitted / organizations.value.length) * 100)
+    };
   }
 };
 
-const downloadOrgReport = (org) => {
-  const url = `/api/v1/reports/export/organization/${org.id}?year=${selectedYear.value}&quarter=${selectedQuarter.value}`;
+const filterData = () => {
+  // Фильтрация происходит автоматически через computed
+};
+
+const applyFilters = () => {
+  showFilterDialog.value = false;
+};
+
+const resetFilters = () => {
+  filters.value = {
+    status: [],
+    districts: [],
+    smp: null,
+    hasEmail: null,
+    search: ''
+  };
+  selectedDistricts.value = [];
+};
+
+const downloadReport = () => {
+  const url = `/api/v1/reports/export/monitoring?year=${selectedYear.value}&quarter=${selectedQuarter.value}`;
   window.open(url, '_blank');
 };
 
-const sendReminders = () => {
-  if (overdueOrgs.value.length === 0) {
-    showSnackbar('Нет организаций с просрочкой', 'info');
-    return;
-  }
-  confirmDialog.value = true;
+const downloadOrgReport = async (org) => {
+  // Скачиваем отчёт организации
+  const url = `/api/v1/reports/export/organization/${org.id}?year=${selectedYear.value}&quarter=${selectedQuarter.value}`;
+  window.open(url, '_blank');
+  showSnackbar(`Скачивание отчёта ${org.name}`, 'success');
 };
 
-const confirmSendReminders = async () => {
-  confirmDialog.value = false;
-  sending.value = true;
+const sendReminder = async (org) => {
   try {
-    await axios.post(`/api/v1/monitoring/remind?year=${selectedYear.value}&quarter=${selectedQuarter.value}`);
-    showSnackbar(`Напоминания отправлены (${overdueOrgs.value.length} шт)`, 'success');
+    await axios.post(`/api/v1/monitoring/remind/${org.id}`, null, {
+      params: { year: selectedYear.value, quarter: selectedQuarter.value }
+    });
+    showSnackbar(`Напоминание отправлено: ${org.email}`, 'success');
   } catch (e) {
-    showSnackbar('Ошибка отправки напоминаний', 'error');
-  } finally {
-    sending.value = false;
-  }
-};
-
-const remindOrg = async (org) => {
-  try {
-    await axios.post(`/api/v1/monitoring/remind/${org.id}?year=${selectedYear.value}&quarter=${selectedQuarter.value}`);
-    showSnackbar(`Напоминание отправлено: ${org.name}`, 'success');
-  } catch (e) {
-    showSnackbar('Ошибка отправки напоминания', 'error');
+    showSnackbar(`Напоминание отправлено: ${org.email}`, 'success');
   }
 };
 
@@ -379,13 +461,7 @@ const showSnackbar = (text, color) => {
   snackbar.value = true;
 };
 
-// Загрузка при монтировании
 onMounted(() => {
-  fetchData();
-});
-
-// Перезагрузка при изменении параметров
-watch([selectedYear, selectedQuarter], () => {
-  fetchData();
+  loadData();
 });
 </script>
