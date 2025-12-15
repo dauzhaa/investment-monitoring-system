@@ -45,19 +45,7 @@
         ></v-list-item>
       </v-list>
 
-      <template v-slot:append>
-        <v-divider></v-divider>
-        <v-list density="compact">
-          <v-list-item
-            prepend-icon="mdi-logout"
-            title="Выход"
-            @click="logout"
-            rounded="lg"
-            class="my-2 mx-2"
-            color="error"
-          ></v-list-item>
-        </v-list>
-      </template>
+      <!-- Убрана кнопка Выход из sidebar -->
     </v-navigation-drawer>
 
     <!-- App Bar -->
@@ -104,18 +92,11 @@
       <router-view />
     </v-main>
 
-    <!-- Snackbar for notifications -->
-    <v-snackbar
-      v-model="snackbar.show"
-      :color="snackbar.color"
-      :timeout="3000"
-      location="top right"
-    >
+    <!-- Snackbar -->
+    <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="3000" location="top right">
       {{ snackbar.text }}
       <template v-slot:actions>
-        <v-btn variant="text" @click="snackbar.show = false">
-          Закрыть
-        </v-btn>
+        <v-btn variant="text" @click="snackbar.show = false">Закрыть</v-btn>
       </template>
     </v-snackbar>
   </v-app>
@@ -126,21 +107,12 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 
 const router = useRouter();
-
 const drawer = ref(true);
 const rail = ref(false);
-
-const snackbar = ref({
-  show: false,
-  text: '',
-  color: 'success'
-});
-
+const snackbar = ref({ show: false, text: '', color: 'success' });
 const currentUser = ref(null);
 
-const isAuthenticated = computed(() => {
-  return !!localStorage.getItem('token');
-});
+const isAuthenticated = computed(() => !!localStorage.getItem('token'));
 
 const menuItems = [
   { title: 'Главная', icon: 'mdi-view-dashboard-outline', to: '/dashboard' },
@@ -156,9 +128,7 @@ const logout = () => {
   router.push('/login');
 };
 
-const openSettings = () => {
-  // TODO: открыть настройки
-};
+const openSettings = () => {};
 
 onMounted(() => {
   const userStr = localStorage.getItem('user');
@@ -173,7 +143,6 @@ onMounted(() => {
 </script>
 
 <style>
-/* Глобальные стили для мягких цветов */
 :root {
   --primary-color: #5C6BC0;
   --success-color: #26A69A;
