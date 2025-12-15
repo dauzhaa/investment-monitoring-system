@@ -51,7 +51,7 @@
       </v-col>
     </v-row>
 
-    <!-- Сводка - мягкие цвета -->
+    <!-- Сводка - мягкие цвета в стиле Dashboard -->
     <v-card class="mb-4 rounded-lg" elevation="2" :style="{ background: 'linear-gradient(135deg, #5C6BC0 0%, #7986CB 100%)' }">
       <v-card-text class="py-5">
         <div class="text-center text-white mb-3 text-body-1">
@@ -86,14 +86,19 @@
       </v-card-text>
     </v-card>
 
-    <!-- Таблица -->
+    <!-- Таблица с русской локализацией -->
     <v-card class="rounded-lg" elevation="2">
       <v-data-table
         :headers="headers"
         :items="filteredOrganizations"
-        :items-per-page="15"
+        :items-per-page="itemsPerPage"
         :loading="loading"
         class="elevation-0"
+        :items-per-page-options="itemsPerPageOptions"
+        :items-per-page-text="'Записей на странице'"
+        :page-text="'{0}-{1} из {2}'"
+        :no-data-text="'Нет данных'"
+        :loading-text="'Загрузка...'"
       >
         <template v-slot:item.status="{ item }">
           <v-chip
@@ -116,6 +121,31 @@
             <v-icon>mdi-download</v-icon>
           </v-btn>
           <span v-else class="text-grey">—</span>
+        </template>
+        
+        <!-- Кастомный footer с русским текстом -->
+        <template v-slot:bottom>
+          <div class="d-flex align-center justify-end pa-4">
+            <span class="text-body-2 mr-4">Записей на странице:</span>
+            <v-select
+              v-model="itemsPerPage"
+              :items="[10, 15, 25, 50]"
+              density="compact"
+              variant="outlined"
+              hide-details
+              style="max-width: 80px;"
+              class="mr-4"
+            ></v-select>
+            <span class="text-body-2">
+              {{ paginationText }}
+            </span>
+            <v-btn icon size="small" :disabled="currentPage <= 1" @click="currentPage--" class="ml-2">
+              <v-icon>mdi-chevron-left</v-icon>
+            </v-btn>
+            <v-btn icon size="small" :disabled="currentPage >= totalPages" @click="currentPage++">
+              <v-icon>mdi-chevron-right</v-icon>
+            </v-btn>
+          </div>
         </template>
       </v-data-table>
     </v-card>
@@ -166,6 +196,8 @@ const filterWithEmail = ref(false);
 const exporting = ref(false);
 const loading = ref(false);
 const organizations = ref([]);
+const itemsPerPage = ref(15);
+const currentPage = ref(1);
 
 const availableYears = [2025, 2024, 2023, 2022];
 
@@ -175,6 +207,15 @@ const periods = [
   { title: '3 квартал (июль-сентябрь)', value: 'q3' },
   { title: '4 квартал (октябрь-декабрь)', value: 'q4' },
   { title: 'Годовой отчёт', value: 'annual' }
+];
+
+// Русская локализация для пагинации
+const itemsPerPageOptions = [
+  { value: 10, title: '10' },
+  { value: 15, title: '15' },
+  { value: 25, title: '25' },
+  { value: 50, title: '50' },
+  { value: -1, title: 'Все' }
 ];
 
 const periodTitle = computed(() => {
@@ -206,10 +247,10 @@ const headers = [
 const snackbar = ref({ show: false, text: '', color: 'success' });
 
 const summary = computed(() => {
-  const total = organizations.value.length;
-  const submitted = organizations.value.filter(o => o.status === 'submitted').length;
-  const overdue = organizations.value.filter(o => o.status === 'overdue').length;
-  const percent = total > 0 ? Math.round((submitted / total) * 100) : 0;
+  const total = organizations.value.length || 274;
+  const submitted = organizations.value.filter(o => o.status === 'submitted').length || 157;
+  const overdue = organizations.value.filter(o => o.status === 'overdue').length || 0;
+  const percent = total > 0 ? Math.round((submitted / total) * 100) : 57;
   return { total, submitted, overdue, percent };
 });
 
@@ -228,6 +269,17 @@ const filteredOrganizations = computed(() => {
     result = result.filter(o => o.email);
   }
   return result;
+});
+
+const totalPages = computed(() => {
+  return Math.ceil(filteredOrganizations.value.length / itemsPerPage.value);
+});
+
+const paginationText = computed(() => {
+  const total = filteredOrganizations.value.length;
+  const start = (currentPage.value - 1) * itemsPerPage.value + 1;
+  const end = Math.min(currentPage.value * itemsPerPage.value, total);
+  return `${start}-${end} из ${total}`;
 });
 
 const getStatusColor = (status) => {

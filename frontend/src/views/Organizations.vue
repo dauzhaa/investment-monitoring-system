@@ -62,7 +62,7 @@
         :headers="headers"
         :items="filteredItems"
         :search="search"
-        :items-per-page="15"
+        :items-per-page="itemsPerPage"
         :loading="loading"
         class="elevation-0"
       >
@@ -78,15 +78,27 @@
           </div>
         </template>
 
+        <!-- Район - нормальное отображение -->
+        <template v-slot:item.district="{ item }">
+          <span>{{ item.district || '—' }}</span>
+        </template>
+
+        <!-- ОКВЭД - нормальное отображение -->
+        <template v-slot:item.okved="{ item }">
+          <span class="text-grey-darken-1">{{ item.okved || '—' }}</span>
+        </template>
+
+        <!-- ФАКТ - правильные единицы (тыс. руб, не тыс*1000) -->
         <template v-slot:item.fact_amount="{ item }">
           <span class="text-success font-weight-bold">
-            {{ formatMoney(item.fact_amount) }} тыс. ₽
+            {{ formatMoney(item.fact_amount) }}
           </span>
         </template>
 
+        <!-- ПЛАН -->
         <template v-slot:item.plan_amount="{ item }">
           <span class="text-grey-darken-1">
-            {{ formatMoney(item.plan_amount) }} тыс. ₽
+            {{ formatMoney(item.plan_amount) }}
           </span>
         </template>
 
@@ -101,14 +113,41 @@
             <v-icon>mdi-eye</v-icon>
           </v-btn>
         </template>
+        
+        <!-- Кастомный footer с русским текстом -->
+        <template v-slot:bottom>
+          <div class="d-flex align-center justify-end pa-4">
+            <span class="text-body-2 mr-4">Записей на странице:</span>
+            <v-select
+              v-model="itemsPerPage"
+              :items="[10, 15, 25, 50, 100]"
+              density="compact"
+              variant="outlined"
+              hide-details
+              style="max-width: 80px;"
+              class="mr-4"
+            ></v-select>
+            <span class="text-body-2">
+              {{ paginationText }}
+            </span>
+            <v-btn icon size="small" :disabled="currentPage <= 1" @click="currentPage--" class="ml-2">
+              <v-icon>mdi-chevron-left</v-icon>
+            </v-btn>
+            <v-btn icon size="small" :disabled="currentPage >= totalPages" @click="currentPage++">
+              <v-icon>mdi-chevron-right</v-icon>
+            </v-btn>
+          </div>
+        </template>
       </v-data-table>
     </v-card>
 
     <!-- Диалог расширенных фильтров (без ОКВЭД) -->
     <v-dialog v-model="showFilters" max-width="700">
       <v-card>
-        <v-card-title class="text-h6">Расширенные фильтры</v-card-title>
-        <v-card-text>
+        <v-card-title class="text-h6" style="background: #5C6BC0; color: white;">
+          Расширенные фильтры
+        </v-card-title>
+        <v-card-text class="pa-4">
           <!-- Районы (чипсы) -->
           <div class="text-subtitle-2 mb-2">Районы</div>
           <div class="d-flex flex-wrap ga-2 mb-4">
@@ -193,13 +232,13 @@
     <!-- Диалог деталей -->
     <v-dialog v-model="detailsDialog" max-width="600">
       <v-card v-if="selectedOrg">
-        <v-card-title class="bg-primary text-white">{{ selectedOrg.name }}</v-card-title>
+        <v-card-title class="text-white" style="background: #5C6BC0;">{{ selectedOrg.name }}</v-card-title>
         <v-card-text class="pa-4">
           <v-row>
             <v-col cols="6">
               <p><strong>ИНН:</strong> {{ selectedOrg.inn }}</p>
-              <p><strong>Район:</strong> {{ selectedOrg.district }}</p>
-              <p><strong>ОКВЭД:</strong> {{ selectedOrg.okved }}</p>
+              <p><strong>Район:</strong> {{ selectedOrg.district || '—' }}</p>
+              <p><strong>ОКВЭД:</strong> {{ selectedOrg.okved || '—' }}</p>
             </v-col>
             <v-col cols="6">
               <p><strong>СМП:</strong> {{ selectedOrg.is_smp ? 'Да' : 'Нет' }}</p>
@@ -210,17 +249,17 @@
           <v-row>
             <v-col cols="6">
               <p><strong>ФАКТ ({{ selectedYear }}):</strong> 
-                <span class="text-success">{{ formatMoney(selectedOrg.fact_amount) }} тыс. ₽</span>
+                <span class="text-success font-weight-bold">{{ formatMoney(selectedOrg.fact_amount) }}</span>
               </p>
             </v-col>
             <v-col cols="6">
-              <p><strong>ПЛАН ({{ selectedYear }}):</strong> {{ formatMoney(selectedOrg.plan_amount) }} тыс. ₽</p>
+              <p><strong>ПЛАН ({{ selectedYear }}):</strong> {{ formatMoney(selectedOrg.plan_amount) }}</p>
             </v-col>
           </v-row>
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn color="primary" @click="detailsDialog = false">Закрыть</v-btn>
+          <v-btn color="#5C6BC0" variant="flat" @click="detailsDialog = false">Закрыть</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -239,6 +278,8 @@ const items = ref([]);
 const showFilters = ref(false);
 const detailsDialog = ref(false);
 const selectedOrg = ref(null);
+const itemsPerPage = ref(15);
+const currentPage = ref(1);
 
 // Фильтры
 const selectedDistricts = ref([]);
@@ -259,7 +300,7 @@ const smpOptions = [
 const statusOptions = [
   { title: 'Все', value: null },
   { title: 'Сдан', value: 'submitted' },
-  { title: 'Не запланировано', value: 'not_planned' },
+  { title: 'Нет данных', value: 'no_data' },
   { title: 'Просрочено', value: 'overdue' }
 ];
 
@@ -280,14 +321,14 @@ const allDistricts = ref([
 
 // Заголовки таблицы (без СМП столбца!)
 const headers = [
-  { title: 'Наименование', key: 'name', sortable: true, width: '35%' },
-  { title: 'ИНН', key: 'inn', sortable: true, width: '12%' },
-  { title: 'Район', key: 'district', sortable: true, width: '18%' },
+  { title: 'Наименование', key: 'name', sortable: true, width: '32%' },
+  { title: 'ИНН', key: 'inn', sortable: true, width: '11%' },
+  { title: 'Район', key: 'district', sortable: true, width: '15%' },
   { title: 'ОКВЭД', key: 'okved', sortable: true, width: '8%' },
   { title: 'ФАКТ', key: 'fact_amount', sortable: true, width: '12%' },
-  { title: 'ПЛАН', key: 'plan_amount', sortable: true, width: '10%' },
-  { title: 'Статус', key: 'status', sortable: true, width: '10%' },
-  { title: '', key: 'actions', sortable: false, width: '5%' }
+  { title: 'ПЛАН', key: 'plan_amount', sortable: true, width: '11%' },
+  { title: 'Статус', key: 'status', sortable: true, width: '9%' },
+  { title: '', key: 'actions', sortable: false, width: '2%' }
 ];
 
 const filteredItems = computed(() => {
@@ -329,18 +370,39 @@ const filteredItems = computed(() => {
   return result;
 });
 
+const totalPages = computed(() => {
+  return Math.ceil(filteredItems.value.length / itemsPerPage.value);
+});
+
+const paginationText = computed(() => {
+  const total = filteredItems.value.length;
+  const start = (currentPage.value - 1) * itemsPerPage.value + 1;
+  const end = Math.min(currentPage.value * itemsPerPage.value, total);
+  return `${start}-${end} из ${total}`;
+});
+
+// ИСПРАВЛЕНО: Правильное форматирование - данные уже в тысячах!
 const formatMoney = (value) => {
-  if (!value) return '0';
-  return value.toLocaleString('ru-RU');
+  if (!value || value === 0) return '0 тыс. ₽';
+  // Данные УЖЕ в тысячах рублей, просто форматируем с пробелами
+  return value.toLocaleString('ru-RU') + ' тыс. ₽';
 };
 
 const getStatusColor = (status) => {
-  const map = { submitted: '#26A69A', not_planned: '#78909C', overdue: '#FF8A65' };
+  const map = { 
+    submitted: '#26A69A', 
+    no_data: '#78909C', 
+    overdue: '#FF8A65' 
+  };
   return map[status] || '#78909C';
 };
 
 const getStatusText = (status) => {
-  const map = { submitted: 'Сдан', not_planned: 'Не запланировано', overdue: 'Просрочено' };
+  const map = { 
+    submitted: 'Сдан', 
+    no_data: 'Нет данных', 
+    overdue: 'Просрочено' 
+  };
   return map[status] || 'Нет данных';
 };
 
@@ -387,9 +449,10 @@ const fetchData = async () => {
         okved: org.okved?.code || org.okved || '',
         is_smp: org.is_smp || false,
         email: org.contact_email || org.email || '',
+        // Данные уже приходят в тысячах, не умножаем!
         fact_amount: org.fact_amount || org.total_investment || 0,
         plan_amount: org.plan_amount || org.forecast || 0,
-        status: org.status || (org.fact_amount > 0 ? 'submitted' : 'not_planned')
+        status: org.status || (org.fact_amount > 0 ? 'submitted' : 'no_data')
       }));
     }
   } catch (e) {
@@ -405,3 +468,10 @@ onMounted(() => {
   fetchData();
 });
 </script>
+
+<style scoped>
+.v-data-table :deep(th) {
+  font-weight: 600 !important;
+  color: #555 !important;
+}
+</style>
