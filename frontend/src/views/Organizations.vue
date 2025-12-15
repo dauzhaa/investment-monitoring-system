@@ -78,17 +78,17 @@
           </div>
         </template>
 
-        <!-- Район - нормальное отображение -->
+        <!-- Район -->
         <template v-slot:item.district="{ item }">
           <span>{{ item.district || '—' }}</span>
         </template>
 
-        <!-- ОКВЭД - нормальное отображение -->
+        <!-- ОКВЭД -->
         <template v-slot:item.okved="{ item }">
           <span class="text-grey-darken-1">{{ item.okved || '—' }}</span>
         </template>
 
-        <!-- ФАКТ - правильные единицы (тыс. руб, не тыс*1000) -->
+        <!-- ФАКТ - ИСПРАВЛЕНО: делим на 1000 чтобы получить тысячи -->
         <template v-slot:item.fact_amount="{ item }">
           <span class="text-success font-weight-bold">
             {{ formatMoney(item.fact_amount) }}
@@ -141,22 +141,23 @@
       </v-data-table>
     </v-card>
 
-    <!-- Диалог расширенных фильтров (без ОКВЭД) -->
+    <!-- Диалог расширенных фильтров - ТЁМНЫЕ ЧИПЫ ДЛЯ РАЙОНОВ -->
     <v-dialog v-model="showFilters" max-width="700">
       <v-card>
         <v-card-title class="text-h6" style="background: #5C6BC0; color: white;">
           Расширенные фильтры
         </v-card-title>
         <v-card-text class="pa-4">
-          <!-- Районы (чипсы) -->
-          <div class="text-subtitle-2 mb-2">Районы</div>
+          <!-- Районы - ТЁМНЫЕ ЦВЕТА для видимости на проекторе -->
+          <div class="text-subtitle-2 mb-2 font-weight-bold">Районы</div>
           <div class="d-flex flex-wrap ga-2 mb-4">
             <v-chip
               v-for="d in allDistricts"
               :key="d"
-              :color="selectedDistricts.includes(d) ? '#5C6BC0' : 'grey-lighten-2'"
-              :variant="selectedDistricts.includes(d) ? 'flat' : 'outlined'"
+              :color="selectedDistricts.includes(d) ? '#1565C0' : '#546E7A'"
+              :variant="selectedDistricts.includes(d) ? 'flat' : 'flat'"
               size="small"
+              class="text-white"
               @click="toggleDistrict(d)"
             >
               {{ d }}
@@ -319,7 +320,7 @@ const allDistricts = ref([
   'Уватский район', 'Упоровский район', 'Юргинский район', 'Ярковский район'
 ]);
 
-// Заголовки таблицы (без СМП столбца!)
+// Заголовки таблицы
 const headers = [
   { title: 'Наименование', key: 'name', sortable: true, width: '32%' },
   { title: 'ИНН', key: 'inn', sortable: true, width: '11%' },
@@ -334,45 +335,33 @@ const headers = [
 const filteredItems = computed(() => {
   let result = [...items.value];
 
-  // Фильтр по районам
   if (selectedDistricts.value.length > 0) {
     result = result.filter(item => selectedDistricts.value.includes(item.district));
   }
-
-  // Фильтр по СМП
   if (filterSMP.value !== null) {
     result = result.filter(item => item.is_smp === filterSMP.value);
   }
-
-  // Фильтр по статусу
   if (filterStatus.value) {
     result = result.filter(item => item.status === filterStatus.value);
   }
-
-  // Фильтр по инвестициям
   if (filterMinInvest.value) {
     result = result.filter(item => item.fact_amount >= filterMinInvest.value);
   }
   if (filterMaxInvest.value) {
     result = result.filter(item => item.fact_amount <= filterMaxInvest.value);
   }
-
-  // Фильтр по email
   if (filterEmail.value === true) {
     result = result.filter(item => item.email);
   } else if (filterEmail.value === false) {
     result = result.filter(item => !item.email);
   }
 
-  // Сортировка
   result.sort((a, b) => sortOrder.value === 'asc' ? a.fact_amount - b.fact_amount : b.fact_amount - a.fact_amount);
 
   return result;
 });
 
-const totalPages = computed(() => {
-  return Math.ceil(filteredItems.value.length / itemsPerPage.value);
-});
+const totalPages = computed(() => Math.ceil(filteredItems.value.length / itemsPerPage.value));
 
 const paginationText = computed(() => {
   const total = filteredItems.value.length;
@@ -381,28 +370,21 @@ const paginationText = computed(() => {
   return `${start}-${end} из ${total}`;
 });
 
-// ИСПРАВЛЕНО: Правильное форматирование - данные уже в тысячах!
+// ИСПРАВЛЕНО: Данные приходят в рублях, делим на 1000 для тысяч
 const formatMoney = (value) => {
   if (!value || value === 0) return '0 тыс. ₽';
-  // Данные УЖЕ в тысячах рублей, просто форматируем с пробелами
-  return value.toLocaleString('ru-RU') + ' тыс. ₽';
+  // Если число больше 100000, значит это рубли - делим на 1000
+  const thousands = value > 100000 ? Math.round(value / 1000) : value;
+  return thousands.toLocaleString('ru-RU') + ' тыс. ₽';
 };
 
 const getStatusColor = (status) => {
-  const map = { 
-    submitted: '#26A69A', 
-    no_data: '#78909C', 
-    overdue: '#FF8A65' 
-  };
+  const map = { submitted: '#26A69A', no_data: '#78909C', overdue: '#FF8A65' };
   return map[status] || '#78909C';
 };
 
 const getStatusText = (status) => {
-  const map = { 
-    submitted: 'Сдан', 
-    no_data: 'Нет данных', 
-    overdue: 'Просрочено' 
-  };
+  const map = { submitted: 'Сдан', no_data: 'Нет данных', overdue: 'Просрочено' };
   return map[status] || 'Нет данных';
 };
 
@@ -422,20 +404,14 @@ const resetFilters = () => {
   filterEmail.value = null;
 };
 
-const resetAllFilters = () => {
-  resetFilters();
-};
-
-const applyFilters = () => {
-  showFilters.value = false;
-};
+const resetAllFilters = () => resetFilters();
+const applyFilters = () => { showFilters.value = false; };
 
 const viewDetails = (item) => {
   selectedOrg.value = item;
   detailsDialog.value = true;
 };
 
-// Загрузка данных из БД
 const fetchData = async () => {
   loading.value = true;
   try {
@@ -449,24 +425,20 @@ const fetchData = async () => {
         okved: org.okved?.code || org.okved || '',
         is_smp: org.is_smp || false,
         email: org.contact_email || org.email || '',
-        // Данные уже приходят в тысячах, не умножаем!
         fact_amount: org.fact_amount || org.total_investment || 0,
         plan_amount: org.plan_amount || org.forecast || 0,
         status: org.status || (org.fact_amount > 0 ? 'submitted' : 'no_data')
       }));
     }
   } catch (e) {
-    console.error('Error fetching organizations:', e);
+    console.error('Error:', e);
   } finally {
     loading.value = false;
   }
 };
 
 watch(selectedYear, fetchData);
-
-onMounted(() => {
-  fetchData();
-});
+onMounted(fetchData);
 </script>
 
 <style scoped>

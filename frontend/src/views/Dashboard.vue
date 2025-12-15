@@ -39,7 +39,7 @@
             {{ formatMoney(currentYearData.factTotal) }}
           </div>
           <div class="text-caption text-grey">ФАКТ</div>
-          <div class="text-body-2 mt-1" :style="{ color: colors.warning }">
+          <div class="text-body-2 mt-1" :style="{ color: colors.planText }">
             {{ formatMoney(currentYearData.planTotal) }} <span class="text-grey">ПЛАН</span>
           </div>
         </v-card>
@@ -141,109 +141,99 @@
       </v-col>
     </v-row>
 
-    <!-- Диалог района - УЛУЧШЕННЫЙ -->
+    <!-- Диалог района -->
     <v-dialog v-model="districtDialog" max-width="650">
       <v-card class="rounded-lg">
-        <!-- Заголовок -->
         <v-card-title class="py-4 px-6" :style="{ backgroundColor: colors.primary }">
           <div class="d-flex align-center justify-space-between w-100">
             <div class="d-flex align-center">
               <v-icon color="white" class="mr-3" size="28">mdi-map-marker</v-icon>
-              <span class="text-h6 text-white font-weight-bold">{{ selectedDistrict.name }}</span>
+              <div>
+                <div class="text-h6 text-white font-weight-bold">{{ selectedDistrict.name }}</div>
+                <div class="text-caption text-white" style="opacity: 0.8;">{{ selectedYear }} год</div>
+              </div>
             </div>
-            <v-chip color="white" variant="elevated" size="small" class="font-weight-bold">
-              {{ selectedYear }} г.
-            </v-chip>
+            <v-btn icon variant="text" color="white" @click="districtDialog = false">
+              <v-icon>mdi-close</v-icon>
+            </v-btn>
           </div>
         </v-card-title>
-
+        
         <v-card-text class="pa-6">
-          <!-- Основные показатели -->
+          <!-- Основная статистика -->
           <v-row class="mb-4">
             <v-col cols="4">
-              <v-card variant="flat" class="pa-4 text-center rounded-lg" :style="{ backgroundColor: '#F3E5F5' }">
-                <v-icon :color="colors.primary" size="32" class="mb-2">mdi-domain</v-icon>
-                <div class="text-h4 font-weight-bold" :style="{ color: colors.primary }">
+              <div class="text-center pa-3 rounded-lg" style="background: #E8F5E9;">
+                <div class="text-h5 font-weight-bold" style="color: #2E7D32;">
+                  {{ formatMoneyShort(selectedDistrict.fact) }}
+                </div>
+                <div class="text-caption text-grey-darken-1">ФАКТ</div>
+              </div>
+            </v-col>
+            <v-col cols="4">
+              <div class="text-center pa-3 rounded-lg" style="background: #E3F2FD;">
+                <div class="text-h5 font-weight-bold" style="color: #1565C0;">
+                  {{ formatMoneyShort(selectedDistrict.plan) }}
+                </div>
+                <div class="text-caption text-grey-darken-1">ПЛАН</div>
+              </div>
+            </v-col>
+            <v-col cols="4">
+              <div class="text-center pa-3 rounded-lg" style="background: #FFF3E0;">
+                <div class="text-h5 font-weight-bold" style="color: #E65100;">
                   {{ selectedDistrict.orgCount }}
                 </div>
                 <div class="text-caption text-grey-darken-1">Организаций</div>
-              </v-card>
-            </v-col>
-            <v-col cols="4">
-              <v-card variant="flat" class="pa-4 text-center rounded-lg" :style="{ backgroundColor: '#E0F2F1' }">
-                <v-icon :color="colors.success" size="32" class="mb-2">mdi-arrow-up-bold</v-icon>
-                <div class="text-h5 font-weight-bold" :style="{ color: colors.success }">
-                  {{ formatMoney(selectedDistrict.fact) }}
-                </div>
-                <div class="text-caption text-grey-darken-1">ФАКТ</div>
-              </v-card>
-            </v-col>
-            <v-col cols="4">
-              <v-card variant="flat" class="pa-4 text-center rounded-lg" :style="{ backgroundColor: '#FFF3E0' }">
-                <v-icon :color="colors.warning" size="32" class="mb-2">mdi-target</v-icon>
-                <div class="text-h5 font-weight-bold" :style="{ color: colors.warning }">
-                  {{ formatMoney(selectedDistrict.plan) }}
-                </div>
-                <div class="text-caption text-grey-darken-1">ПЛАН</div>
-              </v-card>
+              </div>
             </v-col>
           </v-row>
 
-          <!-- Прогресс освоения -->
-          <v-card variant="outlined" class="pa-4 mb-4 rounded-lg">
-            <div class="d-flex align-center justify-space-between mb-2">
-              <span class="text-body-2 font-weight-medium">Освоение бюджета</span>
-              <span class="text-h6 font-weight-bold" :style="{ color: getExecutionColor(selectedDistrict.execution) }">
+          <!-- Освоение -->
+          <div class="mb-4">
+            <div class="d-flex justify-space-between mb-1">
+              <span class="text-body-2">Освоение бюджета</span>
+              <span class="text-body-2 font-weight-bold" :style="{ color: getExecutionColor(selectedDistrict.execution) }">
                 {{ selectedDistrict.execution }}%
               </span>
             </div>
             <v-progress-linear
               :model-value="Math.min(selectedDistrict.execution, 100)"
               :color="getExecutionColor(selectedDistrict.execution)"
-              height="12"
+              height="8"
               rounded
             ></v-progress-linear>
-          </v-card>
-
-          <!-- Кварталы -->
-          <div class="text-subtitle-1 font-weight-bold mb-3">
-            Данные по кварталам {{ selectedYear }} г.
           </div>
-          <v-row>
-            <v-col cols="3" v-for="q in 4" :key="q">
-              <v-card 
-                variant="flat" 
-                class="pa-3 text-center rounded-lg"
+
+          <!-- По кварталам -->
+          <div class="text-subtitle-2 mb-2 font-weight-bold">По кварталам</div>
+          <v-row dense>
+            <v-col v-for="q in 4" :key="q" cols="3">
+              <div 
+                class="text-center pa-2 rounded" 
                 :style="{ 
-                  backgroundColor: getQuarterBg(q),
-                  border: `1px solid ${getQuarterBorder(q)}`
+                  background: getQuarterBg(q),
+                  border: '1px solid ' + getQuarterBorder(q)
                 }"
               >
-                <div class="text-caption font-weight-bold mb-1" :style="{ color: colors.primary }">
-                  {{ q }} квартал
+                <div class="text-caption font-weight-bold mb-1">Q{{ q }}</div>
+                <div class="text-caption" style="color: #2E7D32;">
+                  {{ formatMoneyShort(getQuarterFact(q)) }}
                 </div>
-                <div class="text-body-1 font-weight-bold" :style="{ color: colors.success }">
-                  {{ formatMoneyShort(selectedDistrict.quarters?.[q - 1]?.fact || 0) }}
+                <div class="text-caption text-grey">
+                  {{ formatMoneyShort(getQuarterPlan(q)) }}
                 </div>
-                <div class="text-caption" :style="{ color: colors.warning }">
-                  / {{ formatMoneyShort(selectedDistrict.quarters?.[q - 1]?.plan || 0) }}
-                </div>
-              </v-card>
+              </div>
             </v-col>
           </v-row>
         </v-card-text>
 
-        <v-divider></v-divider>
-
-        <v-card-actions class="pa-4">
-          <v-btn variant="flat" :color="colors.primary" @click="exportDistrictReport(selectedDistrict.name)">
-            <v-icon class="mr-2">mdi-download</v-icon>
-            Выгрузить отчёт
+        <v-card-actions class="px-6 pb-4">
+          <v-btn variant="outlined" :color="colors.primary" @click="exportDistrictReport(selectedDistrict.name)">
+            <v-icon class="mr-1">mdi-download</v-icon>
+            Скачать отчёт
           </v-btn>
           <v-spacer></v-spacer>
-          <v-btn variant="text" color="grey-darken-1" @click="districtDialog = false">
-            Закрыть
-          </v-btn>
+          <v-btn color="grey" variant="text" @click="districtDialog = false">Закрыть</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -255,24 +245,26 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
-import VChart from 'vue-echarts';
+import { ref, computed, onMounted } from 'vue';
 import { use } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
 import { BarChart } from 'echarts/charts';
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components';
+import VChart from 'vue-echarts';
 import MapChart from '@/components/MapChart.vue';
 import api from '@/services/api';
 
 use([CanvasRenderer, BarChart, GridComponent, TooltipComponent, LegendComponent]);
 
-// Цвета
+// НОВЫЕ ЦВЕТА - СОЧЕТАЮТСЯ С СИНИМ, БЕЛЫМ, ЗЕЛЁНЫМ
 const colors = {
-  primary: '#5C6BC0',
-  success: '#26A69A',
-  warning: '#FF8A65',
-  accent: '#FFCA28',
-  info: '#42A5F5'
+  primary: '#5C6BC0',    // Сине-фиолетовый (основной)
+  success: '#26A69A',    // Бирюзовый/зелёный для ФАКТ
+  plan: '#90CAF9',       // Светло-голубой для ПЛАН (сочетается с синим!)
+  planText: '#1976D2',   // Синий для текста ПЛАН
+  accent: '#FFCA28',     // Жёлтый
+  info: '#42A5F5',       // Голубой
+  warning: '#FF8A65'     // Оранжевый
 };
 
 const selectedYear = ref(2025);
@@ -342,7 +334,6 @@ const mockDataByYear = {
   }
 };
 
-// Данные районов по годам
 const districtsByYear = {
   2022: [
     { name: 'Тюмень', fact: 169154000, plan: 170000000, orgCount: 89 },
@@ -377,7 +368,6 @@ const districtsByYear = {
   2025: []
 };
 
-// Заполняем данные для других годов с коэффициентами
 [2023, 2024, 2025].forEach(year => {
   const coef = year === 2023 ? 1.08 : year === 2024 ? 1.15 : 0.98;
   districtsByYear[year] = districtsByYear[2022].map(d => ({
@@ -394,16 +384,14 @@ const allYearsData = [
   { year: 2025, fact: 384379000, plan: 470000000 }
 ];
 
-// Computed: данные для текущего года
 const currentYearData = computed(() => mockDataByYear[selectedYear.value] || mockDataByYear[2022]);
 
-// Computed: данные карты для текущего года
 const currentMapData = computed(() => {
   const districts = districtsByYear[selectedYear.value] || districtsByYear[2022];
   return districts.map(d => ({ name: d.name, value: d.fact }));
 });
 
-// Computed: квартальный график
+// КВАРТАЛЬНЫЙ ГРАФИК - НОВЫЕ ЦВЕТА (ЗЕЛЁНЫЙ + ГОЛУБОЙ)
 const quarterlyChartOption = computed(() => {
   const qData = currentYearData.value.quarters;
   return {
@@ -422,13 +410,24 @@ const quarterlyChartOption = computed(() => {
     xAxis: { type: 'category', data: qData.map(d => d.quarter) },
     yAxis: { type: 'value', axisLabel: { formatter: v => (v / 1000000).toFixed(0) + 'М' } },
     series: [
-      { name: 'ФАКТ', type: 'bar', data: qData.map(d => d.fact), itemStyle: { color: colors.success, borderRadius: [4, 4, 0, 0] }, barGap: '20%' },
-      { name: 'ПЛАН', type: 'bar', data: qData.map(d => d.plan), itemStyle: { color: colors.warning, borderRadius: [4, 4, 0, 0] } }
+      { 
+        name: 'ФАКТ', 
+        type: 'bar', 
+        data: qData.map(d => d.fact), 
+        itemStyle: { color: '#26A69A', borderRadius: [4, 4, 0, 0] },  // Бирюзовый/зелёный
+        barGap: '20%' 
+      },
+      { 
+        name: 'ПЛАН', 
+        type: 'bar', 
+        data: qData.map(d => d.plan), 
+        itemStyle: { color: '#90CAF9', borderRadius: [4, 4, 0, 0] }  // Светло-голубой!
+      }
     ]
   };
 });
 
-// Годовой график (не зависит от selectedYear)
+// ГОДОВОЙ ГРАФИК - НОВЫЕ ЦВЕТА (ЗЕЛЁНЫЙ + ГОЛУБОЙ)
 const yearlyChartOption = computed(() => ({
   tooltip: {
     trigger: 'axis',
@@ -445,12 +444,22 @@ const yearlyChartOption = computed(() => ({
   xAxis: { type: 'category', data: allYearsData.map(d => d.year) },
   yAxis: { type: 'value', axisLabel: { formatter: v => (v / 1000000).toFixed(0) + 'М' } },
   series: [
-    { name: 'ФАКТ', type: 'bar', data: allYearsData.map(d => d.fact), itemStyle: { color: colors.success, borderRadius: [4, 4, 0, 0] }, barGap: '20%' },
-    { name: 'ПЛАН', type: 'bar', data: allYearsData.map(d => d.plan), itemStyle: { color: colors.warning, borderRadius: [4, 4, 0, 0] } }
+    { 
+      name: 'ФАКТ', 
+      type: 'bar', 
+      data: allYearsData.map(d => d.fact), 
+      itemStyle: { color: '#26A69A', borderRadius: [4, 4, 0, 0] },  // Бирюзовый/зелёный
+      barGap: '20%' 
+    },
+    { 
+      name: 'ПЛАН', 
+      type: 'bar', 
+      data: allYearsData.map(d => d.plan), 
+      itemStyle: { color: '#90CAF9', borderRadius: [4, 4, 0, 0] }  // Светло-голубой!
+    }
   ]
 }));
 
-// Форматирование
 const formatMoney = (value) => {
   if (!value) return '0 ₽';
   const millions = value / 1000000;
@@ -483,45 +492,32 @@ const getQuarterBorder = (q) => {
   return '#E8E8E8';
 };
 
-// Открытие диалога района
 const openDistrictDialog = (districtName) => {
   const districts = districtsByYear[selectedYear.value] || districtsByYear[2022];
-  const d = districts.find(x => districtName.includes(x.name) || x.name.includes(districtName.replace(' район', '')));
-  
+  const d = districts.find(x => x.name === districtName);
   if (d) {
-    const execution = d.plan > 0 ? Math.round((d.fact / d.plan) * 100) : 0;
-    const qFact = [0.2, 0.28, 0.32, 0.2];
-    const qPlan = [0.25, 0.25, 0.25, 0.25];
-    
     selectedDistrict.value = {
-      name: districtName,
-      orgCount: d.orgCount,
-      fact: d.fact,
-      plan: d.plan,
-      execution,
-      quarters: qFact.map((f, i) => ({
-        fact: selectedYear.value === 2025 && i === 3 ? 0 : Math.round(d.fact * f),
-        plan: Math.round(d.plan * qPlan[i])
-      }))
+      ...d,
+      execution: d.plan > 0 ? Math.round((d.fact / d.plan) * 100) : 0
     };
-  } else {
-    selectedDistrict.value = {
-      name: districtName,
-      orgCount: 5,
-      fact: 2000000,
-      plan: 2500000,
-      execution: 80,
-      quarters: [{ fact: 400000, plan: 625000 }, { fact: 560000, plan: 625000 }, { fact: 640000, plan: 625000 }, { fact: selectedYear.value === 2025 ? 0 : 400000, plan: 625000 }]
-    };
+    districtDialog.value = true;
   }
-  districtDialog.value = true;
 };
 
-// Экспорт
+const getQuarterFact = (q) => {
+  const qData = currentYearData.value.quarters;
+  return qData[q - 1]?.fact || 0;
+};
+
+const getQuarterPlan = (q) => {
+  const qData = currentYearData.value.quarters;
+  return qData[q - 1]?.plan || 0;
+};
+
 const exportYearlyReport = async () => {
   try {
     const response = await api.get('/reports/export/yearly', { responseType: 'blob' });
-    downloadFile(response.data, 'investments_2022-2025.xlsx');
+    downloadFile(response.data, `yearly_2022-2025.xlsx`);
     showSnackbar('Отчёт выгружен');
   } catch (e) {
     showSnackbar('Ошибка выгрузки', 'error');
