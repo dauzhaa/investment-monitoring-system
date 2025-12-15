@@ -61,6 +61,13 @@ const routes = [
     meta: { requiresAuth: true }
   },
 
+  {
+    path: '/my-organization',
+    name: 'MyOrganization',
+    component: () => import('@/views/OrganizationDashboard.vue'),
+    meta: { requiresAuth: true, role: 'organization' }
+  },
+
   // 3. Ловушка для всех несуществующих страниц - В САМОМ КОНЦЕ
   {
     path: '/:pathMatch(.*)*',

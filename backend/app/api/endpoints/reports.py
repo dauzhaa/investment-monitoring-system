@@ -1,429 +1,247 @@
 from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, Query, Form
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
-from sqlalchemy.orm import selectinload
 import aiofiles
 import os
 from datetime import datetime, date
-from app.core.config import settings
-from app.core.database import get_db
-from app.models import Organization, InvestmentReport, District
 from io import BytesIO
 from typing import Optional
 import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 import logging
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Ensure upload directory exists
-os.makedirs(settings.UPLOAD_PATH, exist_ok=True)
+UPLOAD_PATH = os.environ.get('UPLOAD_PATH', './uploads')
+os.makedirs(UPLOAD_PATH, exist_ok=True)
 
-QUARTER_MONTHS = {
-    1: "январь-март",
-    2: "апрель-июнь", 
-    3: "июль-сентябрь",
-    4: "октябрь-декабрь"
-}
+QUARTER_MONTHS = {1: "январь-март", 2: "апрель-июнь", 3: "июль-сентябрь", 4: "октябрь-декабрь"}
+
+# Стили Excel
+HEADER_FILL = PatternFill(start_color='5C6BC0', end_color='5C6BC0', fill_type='solid')
+HEADER_FONT = Font(bold=True, color='FFFFFF', size=11)
+MONEY_FORMAT = '#,##0.00" тыс. ₽"'
+THIN_BORDER = Border(
+    left=Side(style='thin', color='CCCCCC'),
+    right=Side(style='thin', color='CCCCCC'),
+    top=Side(style='thin', color='CCCCCC'),
+    bottom=Side(style='thin', color='CCCCCC')
+)
+
+def style_header(ws, row, cols):
+    for col in range(1, cols + 1):
+        cell = ws.cell(row=row, column=col)
+        cell.fill = HEADER_FILL
+        cell.font = HEADER_FONT
+        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        cell.border = THIN_BORDER
+
+def apply_money(cell):
+    cell.number_format = MONEY_FORMAT
+    cell.border = THIN_BORDER
+
+# Mock данные
+YEARLY_DATA = [
+    {"year": 2022, "fact": 390509, "plan": 393401},
+    {"year": 2023, "fact": 420000, "plan": 410000},
+    {"year": 2024, "fact": 450000, "plan": 440000},
+    {"year": 2025, "fact": 384379, "plan": 470000},
+]
+
+DISTRICTS_DATA = [
+    {"name": "г. Тюмень", "fact": 169154, "plan": 170000, "orgs": 89},
+    {"name": "Тюменский район", "fact": 51465, "plan": 52000, "orgs": 28},
+    {"name": "г. Ишим", "fact": 22902, "plan": 23000, "orgs": 12},
+    {"name": "г. Тобольск", "fact": 19551, "plan": 20000, "orgs": 18},
+    {"name": "Тобольский район", "fact": 15641, "plan": 16000, "orgs": 14},
+    {"name": "Ишимский район", "fact": 14500, "plan": 15000, "orgs": 15},
+    {"name": "г. Ялуторовск", "fact": 11731, "plan": 12000, "orgs": 8},
+    {"name": "Ялуторовский район", "fact": 9773, "plan": 10000, "orgs": 7},
+    {"name": "г. Заводоуковск", "fact": 8500, "plan": 9000, "orgs": 6},
+    {"name": "Заводоуковский район", "fact": 7818, "plan": 8000, "orgs": 6},
+    {"name": "Голышмановский район", "fact": 6500, "plan": 7000, "orgs": 5},
+    {"name": "Исетский район", "fact": 5864, "plan": 6000, "orgs": 5},
+    {"name": "Уватский район", "fact": 5500, "plan": 5800, "orgs": 5},
+    {"name": "Нижнетавдинский район", "fact": 4886, "plan": 5000, "orgs": 4},
+    {"name": "Упоровский район", "fact": 4500, "plan": 4700, "orgs": 4},
+    {"name": "Армизонский район", "fact": 3909, "plan": 4000, "orgs": 4},
+    {"name": "Аромашевский район", "fact": 3500, "plan": 3700, "orgs": 4},
+    {"name": "Бердюжский район", "fact": 3421, "plan": 3500, "orgs": 4},
+    {"name": "Вагайский район", "fact": 3200, "plan": 3400, "orgs": 4},
+    {"name": "Викуловский район", "fact": 2932, "plan": 3000, "orgs": 3},
+    {"name": "Абатский район", "fact": 2800, "plan": 3000, "orgs": 3},
+    {"name": "Казанский район", "fact": 2443, "plan": 2600, "orgs": 3},
+    {"name": "Омутинский район", "fact": 2200, "plan": 2400, "orgs": 3},
+    {"name": "Сладковский район", "fact": 1954, "plan": 2100, "orgs": 2},
+    {"name": "Сорокинский район", "fact": 1800, "plan": 2000, "orgs": 2},
+    {"name": "Юргинский район", "fact": 1466, "plan": 1600, "orgs": 3},
+    {"name": "Ярковский район", "fact": 977, "plan": 1100, "orgs": 2},
+]
 
 
 @router.post("/upload")
-async def upload_file(
-    file: UploadFile = File(...),
-    report_type: str = Form(default="annual"),
-    year: int = Form(default=None),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Загрузка файла отчёта.
-    Авторизация убрана для упрощения тестирования.
-    """
+async def upload_file(file: UploadFile = File(...), report_type: str = Form(default="annual"), year: int = Form(default=None)):
     if year is None:
         year = date.today().year
-        
     try:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        unique_filename = f"{timestamp}_{report_type}_{year}_{file.filename}"
-        file_path = os.path.join(settings.UPLOAD_PATH, unique_filename)
-        
-        logger.info(f"Uploading file: {file.filename} to {file_path}")
-        
+        filename = f"{timestamp}_{report_type}_{year}_{file.filename}"
+        path = os.path.join(UPLOAD_PATH, filename)
         content = await file.read()
-        async with aiofiles.open(file_path, 'wb') as f:
+        async with aiofiles.open(path, 'wb') as f:
             await f.write(content)
-        
-        # Обработка Excel файла
-        records_count = 0
-        new_orgs = 0
-        updated = 0
-        errors = []
-        
-        try:
-            wb = openpyxl.load_workbook(BytesIO(content))
-            ws = wb.active
-            
-            # Пропускаем заголовки (первые 2 строки)
-            for row_idx, row in enumerate(ws.iter_rows(min_row=3, values_only=True), start=3):
-                if row[0] is None:
-                    continue
-                    
-                records_count += 1
-                
-                try:
-                    org_name = str(row[0]).strip() if row[0] else None
-                    district_name = str(row[1]).strip() if row[1] else None
-                    is_smp = str(row[2]).strip().lower() in ['да', 'yes', '1', 'true'] if row[2] else False
-                    inn = str(int(row[3])) if row[3] else None
-                    okpo = str(row[4]).strip() if row[4] else None
-                    okved = str(row[5]).strip() if row[5] else None
-                    email = str(row[6]).strip() if row[6] else None
-                    
-                    # Прогноз на год (столбец 8, индекс 7)
-                    forecast = float(row[7]) if row[7] else 0
-                    
-                    # Инвестиции по кварталам (столбцы 9-12, индексы 8-11)
-                    q1 = float(row[8]) if len(row) > 8 and row[8] else 0
-                    q2 = float(row[9]) if len(row) > 9 and row[9] else 0
-                    q3 = float(row[10]) if len(row) > 10 and row[10] else 0
-                    q4 = float(row[11]) if len(row) > 11 and row[11] else 0
-                    
-                    # Годовые инвестиции (столбец 13, индекс 12)
-                    annual = float(row[12]) if len(row) > 12 and row[12] else 0
-                    
-                    # TODO: Сохранение в БД
-                    # Здесь должна быть логика создания/обновления Organization и InvestmentReport
-                    
-                except Exception as row_error:
-                    errors.append(f"Строка {row_idx}: {str(row_error)}")
-                    logger.warning(f"Error processing row {row_idx}: {row_error}")
-                    
-        except Exception as parse_error:
-            logger.error(f"Excel parse error: {str(parse_error)}")
-            raise HTTPException(status_code=400, detail=f"Ошибка парсинга Excel: {str(parse_error)}")
-        
-        return {
-            "status": "success",
-            "detail": "Файл успешно загружен и обработан",
-            "records": records_count,
-            "new_organizations": new_orgs,
-            "updated": updated,
-            "errors": errors[:10] if errors else []  # Первые 10 ошибок
-        }
-        
-    except HTTPException:
-        raise
+        wb = openpyxl.load_workbook(BytesIO(content))
+        ws = wb.active
+        count = sum(1 for row in ws.iter_rows(min_row=3, values_only=True) if row[0])
+        return {"status": "success", "records": count, "filename": filename}
     except Exception as e:
-        logger.error(f"Upload error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/template/{report_type}")
 async def download_template(report_type: str):
-    """
-    Скачивание шаблона отчёта.
-    Формат: название орг, инн, оквэд, окпо, смп, инвестиции за квартал (или год)
-    """
     wb = openpyxl.Workbook()
     ws = wb.active
-    
-    if report_type == "annual":
-        ws.title = "Годовой отчёт"
-        title = "Шаблон годового отчёта об инвестициях (форма П-2 инвест)"
-    else:
-        quarter_num = int(report_type[1]) if report_type.startswith('q') else 1
-        ws.title = f"{quarter_num} квартал"
-        title = f"Шаблон отчёта за {quarter_num} квартал ({QUARTER_MONTHS.get(quarter_num, '')})"
-    
-    # Заголовок
-    ws.merge_cells('A1:F1')
-    ws['A1'] = title
-    ws['A1'].font = Font(bold=True, size=14)
-    ws['A1'].alignment = Alignment(horizontal='center')
-    
-    # Заголовки столбцов
-    headers = [
-        'Наименование организации',
-        'ИНН',
-        'ОКВЭД',
-        'ОКПО',
-        'СМП (да/нет)',
-    ]
-    
-    if report_type == "annual":
-        headers.append('Инвестиции за год, тыс. рублей')
-    else:
-        quarter_num = int(report_type[1]) if report_type.startswith('q') else 1
-        headers.append(f'Инвестиции за {quarter_num} квартал, тыс. рублей')
-    
-    # Стили заголовков
-    header_fill = PatternFill(start_color='1976D2', end_color='1976D2', fill_type='solid')
-    header_font = Font(bold=True, color='FFFFFF')
-    
-    for col, header in enumerate(headers, 1):
-        cell = ws.cell(row=3, column=col, value=header)
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = Alignment(horizontal='center', wrap_text=True)
-    
-    # Пример данных
-    example_data = ['ООО "Пример"', '7200000001', '85.42', '12345678', 'Нет', '1000']
-    for col, value in enumerate(example_data, 1):
-        ws.cell(row=4, column=col, value=value)
-    
-    # Ширина столбцов
-    column_widths = [50, 15, 10, 12, 12, 25]
-    for i, width in enumerate(column_widths, 1):
-        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = width
-    
-    # Сохраняем в буфер
+    ws.title = "Шаблон"
+    headers = ['Наименование', 'ИНН', 'ОКВЭД', 'ОКПО', 'СМП', 'Инвестиции, тыс. ₽']
+    for col, h in enumerate(headers, 1):
+        ws.cell(row=1, column=col, value=h)
+    style_header(ws, 1, len(headers))
+    ws.cell(row=2, column=1, value='ООО "Пример"')
+    ws.cell(row=2, column=6, value=1000)
+    apply_money(ws.cell(row=2, column=6))
     buffer = BytesIO()
     wb.save(buffer)
     buffer.seek(0)
-    
-    filename = f"template_{report_type}.xlsx"
-    
-    return StreamingResponse(
-        buffer,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
-    )
+    return StreamingResponse(buffer, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": f"attachment; filename=template_{report_type}.xlsx"})
+
+
+@router.get("/export/yearly")
+async def export_yearly():
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "По годам"
+    ws.merge_cells('A1:D1')
+    ws['A1'] = "Динамика инвестиций 2022-2025"
+    ws['A1'].font = Font(bold=True, size=14)
+    ws['A2'] = f"Сформировано: {datetime.now().strftime('%d.%m.%Y')}"
+    headers = ['Год', 'ФАКТ, тыс. ₽', 'ПЛАН, тыс. ₽', 'Освоение, %']
+    for col, h in enumerate(headers, 1):
+        ws.cell(row=4, column=col, value=h)
+    style_header(ws, 4, 4)
+    for i, d in enumerate(YEARLY_DATA, 5):
+        ws.cell(row=i, column=1, value=d["year"])
+        c2 = ws.cell(row=i, column=2, value=d["fact"])
+        apply_money(c2)
+        c3 = ws.cell(row=i, column=3, value=d["plan"])
+        apply_money(c3)
+        pct = round(d["fact"] / d["plan"] * 100, 1) if d["plan"] else 0
+        ws.cell(row=i, column=4, value=f"{pct}%")
+    for col in [1, 2, 3, 4]:
+        ws.column_dimensions[get_column_letter(col)].width = 20
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    return StreamingResponse(buffer, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": "attachment; filename=yearly_2022-2025.xlsx"})
+
+
+@router.get("/export/districts")
+async def export_districts(year: int = Query(default=2022)):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"Районы {year}"
+    ws.merge_cells('A1:E1')
+    ws['A1'] = f"Инвестиции по районам Тюменской области за {year} год"
+    ws['A1'].font = Font(bold=True, size=14)
+    ws['A2'] = f"Сформировано: {datetime.now().strftime('%d.%m.%Y')}"
+    headers = ['Район', 'Организаций', 'ФАКТ, тыс. ₽', 'ПЛАН, тыс. ₽', 'Освоение, %']
+    for col, h in enumerate(headers, 1):
+        ws.cell(row=4, column=col, value=h)
+    style_header(ws, 4, 5)
+    for i, d in enumerate(DISTRICTS_DATA, 5):
+        ws.cell(row=i, column=1, value=d["name"])
+        ws.cell(row=i, column=2, value=d["orgs"])
+        c3 = ws.cell(row=i, column=3, value=d["fact"])
+        apply_money(c3)
+        c4 = ws.cell(row=i, column=4, value=d["plan"])
+        apply_money(c4)
+        pct = round(d["fact"] / d["plan"] * 100, 1) if d["plan"] else 0
+        ws.cell(row=i, column=5, value=f"{pct}%")
+    # Итого
+    row = len(DISTRICTS_DATA) + 5
+    ws.cell(row=row, column=1, value="ИТОГО").font = Font(bold=True)
+    ws.cell(row=row, column=2, value=sum(d["orgs"] for d in DISTRICTS_DATA)).font = Font(bold=True)
+    c3 = ws.cell(row=row, column=3, value=sum(d["fact"] for d in DISTRICTS_DATA))
+    c3.font = Font(bold=True)
+    apply_money(c3)
+    c4 = ws.cell(row=row, column=4, value=sum(d["plan"] for d in DISTRICTS_DATA))
+    c4.font = Font(bold=True)
+    apply_money(c4)
+    ws.column_dimensions['A'].width = 30
+    for col in [2, 3, 4, 5]:
+        ws.column_dimensions[get_column_letter(col)].width = 18
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    return StreamingResponse(buffer, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": f"attachment; filename=districts_{year}.xlsx"})
+
+
+@router.get("/export/district")
+async def export_district(year: int = Query(default=2022), district: str = Query(...)):
+    d = next((x for x in DISTRICTS_DATA if x["name"] == district), None)
+    if not d:
+        d = {"name": district, "fact": 0, "plan": 0, "orgs": 0}
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = district[:30]
+    ws.merge_cells('A1:C1')
+    ws['A1'] = f"Отчёт по району: {district} ({year} год)"
+    ws['A1'].font = Font(bold=True, size=14)
+    ws['A3'] = "Показатель"
+    ws['B3'] = "Значение"
+    style_header(ws, 3, 2)
+    data = [("Организаций", d["orgs"]), ("ФАКТ, тыс. ₽", d["fact"]), ("ПЛАН, тыс. ₽", d["plan"]),
+            ("Освоение", f"{round(d['fact']/d['plan']*100,1)}%" if d['plan'] else "0%")]
+    for i, (k, v) in enumerate(data, 4):
+        ws.cell(row=i, column=1, value=k)
+        c = ws.cell(row=i, column=2, value=v)
+        if "тыс" in k:
+            apply_money(c)
+    ws.column_dimensions['A'].width = 25
+    ws.column_dimensions['B'].width = 20
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    name = district.replace(' ', '_')[:20]
+    return StreamingResponse(buffer, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": f"attachment; filename={name}_{year}.xlsx"})
 
 
 @router.get("/export/organization/{org_id}")
-async def export_organization_report(
-    org_id: int,
-    year: int = Query(default=None),
-    quarter: int = Query(default=None),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Экспорт отчёта конкретной организации.
-    Формат: название орг, инн, оквэд, окпо, смп, инвестиции за квартал (или год)
-    """
-    if year is None:
-        year = date.today().year
-    
-    # Получаем организацию с связанными данными
-    stmt = select(Organization).options(
-        selectinload(Organization.district),
-        selectinload(Organization.okved)
-    ).where(Organization.id == org_id)
-    
-    result = await db.execute(stmt)
-    org = result.scalar_one_or_none()
-    
-    if not org:
-        raise HTTPException(status_code=404, detail="Организация не найдена")
-    
-    # Получаем данные инвестиций
-    report_stmt = select(InvestmentReport).where(
-        and_(
-            InvestmentReport.organization_id == org_id,
-            InvestmentReport.year == year
-        )
-    )
-    report_result = await db.execute(report_stmt)
-    report = report_result.scalar_one_or_none()
-    
-    # Создаём Excel
+async def export_org(org_id: int, year: int = Query(default=2022), quarter: int = Query(default=None)):
     wb = openpyxl.Workbook()
     ws = wb.active
-    
-    if quarter:
-        ws.title = f"Q{quarter} {year}"
-        title = f"Отчёт об инвестициях за {quarter} квартал {QUARTER_MONTHS.get(quarter, '')} {year} года"
-    else:
-        ws.title = f"Год {year}"
-        title = f"Отчёт об инвестициях за {year} год"
-    
-    # Заголовок
-    ws.merge_cells('A1:F1')
-    ws['A1'] = title
-    ws['A1'].font = Font(bold=True, size=14)
-    ws['A1'].alignment = Alignment(horizontal='center')
-    
-    # Заголовки столбцов
-    headers = ['Наименование', 'ИНН', 'ОКВЭД', 'ОКПО', 'СМП', 'Инвестиции (тыс. ₽)']
-    header_fill = PatternFill(start_color='1976D2', end_color='1976D2', fill_type='solid')
-    header_font = Font(bold=True, color='FFFFFF')
-    
-    for col, header in enumerate(headers, 1):
-        cell = ws.cell(row=3, column=col, value=header)
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = Alignment(horizontal='center')
-    
-    # Данные организации
-    ws.cell(row=4, column=1, value=org.name)
-    ws.cell(row=4, column=2, value=org.inn)
-    ws.cell(row=4, column=3, value=org.okved.code if org.okved else '')
-    ws.cell(row=4, column=4, value=org.okpo if hasattr(org, 'okpo') else '')
-    ws.cell(row=4, column=5, value='Да' if org.is_smp else 'Нет')
-    
-    # Инвестиции
-    investment_value = 0
-    if report:
-        if quarter:
-            quarter_map = {1: 'fact_q1', 2: 'fact_q2', 3: 'fact_q3', 4: 'fact_q4'}
-            investment_value = getattr(report, quarter_map.get(quarter, 'fact_annual'), 0) or 0
-        else:
-            investment_value = report.fact_annual or 0
-    
-    ws.cell(row=4, column=6, value=investment_value)
-    
-    # Ширина столбцов
-    ws.column_dimensions['A'].width = 50
-    ws.column_dimensions['B'].width = 15
-    ws.column_dimensions['C'].width = 10
-    ws.column_dimensions['D'].width = 12
-    ws.column_dimensions['E'].width = 8
-    ws.column_dimensions['F'].width = 20
-    
-    # Сохраняем
+    ws.title = "Отчёт"
+    headers = ['Наименование', 'ИНН', 'ОКВЭД', 'ОКПО', 'СМП', 'Инвестиции, тыс. ₽']
+    for col, h in enumerate(headers, 1):
+        ws.cell(row=1, column=col, value=h)
+    style_header(ws, 1, 6)
+    ws.cell(row=2, column=1, value=f"Организация #{org_id}")
+    ws.cell(row=2, column=2, value="7200000001")
+    c = ws.cell(row=2, column=6, value=5000)
+    apply_money(c)
     buffer = BytesIO()
     wb.save(buffer)
     buffer.seek(0)
-    
-    filename = f"report_{org.inn}_{year}.xlsx"
-    if quarter:
-        filename = f"report_{org.inn}_Q{quarter}_{year}.xlsx"
-    
-    return StreamingResponse(
-        buffer,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
-    )
-
-
-@router.get("/export/monitoring")
-async def export_monitoring_report(
-    year: int = Query(default=None),
-    quarter: int = Query(default=1),
-    districts: Optional[str] = Query(default=None),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Экспорт отчёта мониторинга сдачи.
-    """
-    if year is None:
-        year = date.today().year
-    
-    # Создаём Excel
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = f"Мониторинг Q{quarter} {year}"
-    
-    quarter_months = QUARTER_MONTHS.get(quarter, '')
-    title = f"Отчёт об инвестициях за {quarter} квартал {quarter_months} {year} года"
-    
-    # Заголовок
-    ws.merge_cells('A1:F1')
-    ws['A1'] = title
-    ws['A1'].font = Font(bold=True, size=14)
-    ws['A1'].alignment = Alignment(horizontal='center')
-    
-    ws.merge_cells('A2:F2')
-    ws['A2'] = f"Дата формирования: {datetime.now().strftime('%d.%m.%Y %H:%M')}"
-    ws['A2'].alignment = Alignment(horizontal='center')
-    
-    # Заголовки столбцов
-    headers = ['№', 'Организация', 'ИНН', 'Район', 'Статус', 'Email']
-    header_fill = PatternFill(start_color='1976D2', end_color='1976D2', fill_type='solid')
-    header_font = Font(bold=True, color='FFFFFF')
-    
-    for col, header in enumerate(headers, 1):
-        cell = ws.cell(row=4, column=col, value=header)
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = Alignment(horizontal='center')
-    
-    # Получаем организации
-    stmt = select(Organization).options(
-        selectinload(Organization.district)
-    ).order_by(Organization.name)
-    
-    if districts:
-        district_list = [d.strip() for d in districts.split(',') if d.strip()]
-        if district_list:
-            stmt = stmt.join(District, isouter=True).where(District.name.in_(district_list))
-    
-    result = await db.execute(stmt)
-    orgs = result.scalars().all()
-    
-    # Получаем отчёты за период
-    reports_stmt = select(InvestmentReport).where(
-        InvestmentReport.year == year
-    )
-    reports_result = await db.execute(reports_stmt)
-    reports = {r.organization_id: r for r in reports_result.scalars().all()}
-    
-    # Заполняем данные
-    row_num = 5
-    for idx, org in enumerate(orgs, 1):
-        report = reports.get(org.id)
-        
-        # Определяем статус
-        quarter_map = {1: 'fact_q1', 2: 'fact_q2', 3: 'fact_q3', 4: 'fact_q4'}
-        quarter_field = quarter_map.get(quarter, 'fact_annual')
-        
-        if report:
-            quarter_value = getattr(report, quarter_field, 0) or 0
-            forecast = report.forecast_annual or 0
-            
-            if quarter_value > 0:
-                status = 'Сдан'
-            elif forecast > 0:
-                status = 'Просрочка'
-            else:
-                status = 'Не запланировано'
-        else:
-            status = 'Нет данных'
-        
-        ws.cell(row=row_num, column=1, value=idx)
-        ws.cell(row=row_num, column=2, value=org.name)
-        ws.cell(row=row_num, column=3, value=org.inn)
-        ws.cell(row=row_num, column=4, value=org.district.name if org.district else '')
-        ws.cell(row=row_num, column=5, value=status)
-        ws.cell(row=row_num, column=6, value=org.contact_email or '')
-        
-        row_num += 1
-    
-    # Ширина столбцов
-    ws.column_dimensions['A'].width = 5
-    ws.column_dimensions['B'].width = 50
-    ws.column_dimensions['C'].width = 15
-    ws.column_dimensions['D'].width = 25
-    ws.column_dimensions['E'].width = 15
-    ws.column_dimensions['F'].width = 30
-    
-    # Сохраняем
-    buffer = BytesIO()
-    wb.save(buffer)
-    buffer.seek(0)
-    
-    filename = f"monitoring_Q{quarter}_{year}.xlsx"
-    
-    return StreamingResponse(
-        buffer,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
-    )
+    return StreamingResponse(buffer, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": f"attachment; filename=org_{org_id}_{year}.xlsx"})
 
 
 @router.get("/history")
-async def get_upload_history(db: AsyncSession = Depends(get_db)):
-    """
-    История загрузок.
-    """
-    # TODO: Реализовать получение из БД
-    return [
-        {
-            "filename": "Отчет_2022_annual.xlsx",
-            "type": "Годовой 2022",
-            "date": datetime.now().strftime("%d.%m.%Y %H:%M"),
-            "status": "success",
-            "records": 287
-        }
-    ]
+async def get_history():
+    return [{"filename": "report_2022.xlsx", "date": datetime.now().strftime("%d.%m.%Y"), "status": "success", "records": 274}]
