@@ -120,6 +120,7 @@ const menuItems = [
   { title: 'Загрузка данных', icon: 'mdi-upload-outline', to: '/upload' },
   { title: 'Организации', icon: 'mdi-domain', to: '/organizations' },
   { title: 'Аналитика', icon: 'mdi-chart-bar', to: '/analytics' },
+  { title: 'Детекция', icon: 'mdi-file-search-outline', to: '/detection' },
 ];
 
 const logout = () => {
