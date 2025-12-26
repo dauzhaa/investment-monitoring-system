@@ -40,7 +40,7 @@ class MLService:
             
             for result in results:
                 # Получаем JSON с координатами
-                json_result = result.tojson()
+                json_result = result.to_json()
                 results_data.append({
                     "page": i + 1,
                     "detections": json_result
