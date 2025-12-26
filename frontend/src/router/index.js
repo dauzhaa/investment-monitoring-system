@@ -7,6 +7,7 @@ import Organizations from '@/views/Organizations.vue';
 import Analytics from '@/views/Analytics.vue';
 import Monitoring from '@/views/Monitoring.vue';
 import District from '@/views/District.vue';
+import Detection from '../views/Detection.vue'
 
 const routes = [
   // 1. Специфичные маршруты - СНАЧАЛА
@@ -58,6 +59,13 @@ const routes = [
     path: '/monitoring',
     name: 'monitoring',
     component: Monitoring,
+    meta: { requiresAuth: true }
+  },
+  
+  {
+    path: '/detection',
+    name: 'Detection',
+    component: Detection,
     meta: { requiresAuth: true }
   },
 

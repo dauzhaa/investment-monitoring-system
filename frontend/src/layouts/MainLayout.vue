@@ -29,7 +29,13 @@
           value="orgs"
         ></v-list-item>
         <v-list-item to="/analytics" title="Аналитика" prepend-icon="mdi-chart-bar" value="analytics"></v-list-item>
+        <v-list-item
+          prepend-icon="mdi-stamper" 
+          title="Детекция"
+          to="/detection"
+        ></v-list-item>
       </v-list>
+
       
       <template v-slot:append>
         <div class="pa-2">

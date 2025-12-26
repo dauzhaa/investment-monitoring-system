@@ -1,73 +1,52 @@
-# backend/app/services/ml_service.py
-import pandas as pd
-from prophet import Prophet
-from sklearn.cluster import KMeans
-from sklearn.preprocessing import StandardScaler
-from sqlalchemy import select, func, update
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.models import Organization, InvestmentReport
-import logging
+import io
+from PIL import Image
+from ultralytics import YOLO
+from pdf2image import convert_from_bytes
+import os
 
-logger = logging.getLogger(__name__)
+# Путь к модели (убедитесь, что файл лежит здесь)
+MODEL_PATH = "app/models/yolo_model.pt"
 
 class MLService:
-    
-    @staticmethod
-    async def generate_forecast(org_id: int, session: AsyncSession):
-        query = select(InvestmentReport).where(
-            InvestmentReport.organization_id == org_id
-        ).order_by(InvestmentReport.year)
-        
-        result = await session.execute(query)
-        reports = result.scalars().all()
-        
-        if len(reports) < 2:
-            logger.warning(f"Org {org_id}: Недостаточно данных для прогноза (минимум 2 года)")
-            return None
+    def __init__(self):
+        # Загружаем модель один раз при старте, если файл существует
+        if os.path.exists(MODEL_PATH):
+            self.model = YOLO(MODEL_PATH)
+        else:
+            print(f"Warning: Model not found at {MODEL_PATH}")
+            self.model = None
 
-        data = []
-        for r in reports:
-            if r.fact_annual > 0:
-                date_str = f"{r.year}-12-31"
-                data.append({
-                    'ds': date_str,
-                    'y': float(r.fact_annual)
-                })
-            
-        if len(data) < 2:
-            logger.warning(f"Org {org_id}: Недостаточно фактических данных")
-            return None
-            
-        df = pd.DataFrame(data)
-        
-        try:
-            m = Prophet(
-                yearly_seasonality=True, 
-                daily_seasonality=False, 
-                weekly_seasonality=False
-            )
-            m.fit(df)
-            
-            future = m.make_future_dataframe(periods=3, freq='Y')
-            forecast = m.predict(future)
-            
-            forecast_results = []
-            future_data = forecast.tail(3)
-            
-            for _, row in future_data.iterrows():
-                yhat = max(0, row['yhat'])
-                forecast_results.append({
-                    'year': row['ds'].year,
-                    'predicted_amount': round(yhat, 2)
-                })
-            
-            return forecast_results
-            
-        except Exception as e:
-            logger.error(f"Prophet error for org {org_id}: {e}")
-            return None
+    def predict(self, file_bytes: bytes, filename: str):
+        if not self.model:
+            return {"error": "Model not loaded"}
 
-    @staticmethod
-    async def perform_clustering(session: AsyncSession):
-        logger.warning("Clustering is deprecated - cluster_group field removed from organizations")
-        return {"status": "deprecated", "message": "Clustering functionality removed"}
+        images = []
+        # Если PDF, конвертируем в картинки
+        if filename.lower().endswith(".pdf"):
+            try:
+                images = convert_from_bytes(file_bytes)
+            except Exception as e:
+                return {"error": f"PDF conversion failed: {str(e)}"}
+        else:
+            # Если картинка
+            image = Image.open(io.BytesIO(file_bytes))
+            images = [image]
+
+        results_data = []
+
+        for i, img in enumerate(images):
+            # Прогон через YOLO
+            results = self.model(img)
+            
+            for result in results:
+                # Получаем JSON с координатами
+                json_result = result.tojson()
+                results_data.append({
+                    "page": i + 1,
+                    "detections": json_result
+                })
+
+        return results_data
+
+# Создаем глобальный экземпляр сервиса
+ml_service = MLService()
