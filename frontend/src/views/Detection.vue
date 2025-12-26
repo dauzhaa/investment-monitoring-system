@@ -1,112 +1,136 @@
 <template>
   <v-container>
-    <v-row justify="center">
-      <v-col cols="12" md="10">
-        <h1 class="text-h4 mb-6 font-weight-bold text-primary">
-          <v-icon size="large" class="mr-2">mdi-stamper</v-icon>
-          Детекция документов
+    <v-row>
+      <v-col cols="12">
+        <h1 class="text-h4 mb-6 text-primary font-weight-bold">
+          <v-icon class="mr-2">mdi-stamper</v-icon>
+          Анализ документов
         </h1>
+      </v-col>
+    </v-row>
 
-        <v-card elevation="2" class="mb-6 rounded-lg">
-          <v-card-title class="text-h6 px-6 pt-6">Загрузка файла</v-card-title>
-          <v-card-text class="px-6 pb-6">
+    <v-row>
+      <v-col cols="12" md="4">
+        <v-card elevation="2" class="rounded-lg">
+          <v-card-title>Загрузка файла</v-card-title>
+          <v-card-text>
             <v-file-input
               v-model="file"
-              label="Выберите PDF или изображение"
+              label="Выберите документ (PDF, JPG)"
               accept=".pdf, .jpg, .jpeg, .png"
-              prepend-icon="mdi-cloud-upload"
+              prepend-icon=""
+              prepend-inner-icon="mdi-file-document-outline"
               variant="outlined"
               color="primary"
-              show-size
-              :error-messages="errorMessage"
-              @update:model-value="errorMessage = ''"
-            >
-              <template v-slot:selection="{ fileNames }">
-                <v-chip size="small" color="primary" class="mr-2">
-                  {{ fileNames[0] }}
-                </v-chip>
-              </template>
-            </v-file-input>
+              :show-size="1000"
+              @update:model-value="result = null"
+            ></v-file-input>
 
-            <div class="d-flex justify-end mt-4">
-              <v-btn
-                color="primary"
-                size="large"
-                :loading="loading"
-                :disabled="!file"
-                @click="uploadFile"
-                prepend-icon="mdi-magnify"
-              >
-                Начать анализ
-              </v-btn>
-            </div>
+            <v-btn
+              block
+              color="primary"
+              size="large"
+              class="mt-4"
+              :loading="loading"
+              :disabled="!file"
+              @click="uploadFile"
+            >
+              <v-icon left>mdi-magnify</v-icon>
+              Найти печати и подписи
+            </v-btn>
+
+            <v-alert
+              v-if="errorMessage"
+              type="error"
+              variant="tonal"
+              class="mt-4"
+              closable
+            >
+              {{ errorMessage }}
+            </v-alert>
           </v-card-text>
         </v-card>
 
-        <v-expand-transition>
-          <div v-if="result">
-            <v-row>
-              <v-col cols="12" md="4">
-                <v-card class="h-100 rounded-lg" color="blue-lighten-5" variant="flat">
-                  <v-card-item>
-                    <div class="text-overline mb-1">Всего найдено</div>
-                    <div class="text-h3 font-weight-bold text-primary">
-                      {{ totalDetections }}
-                    </div>
-                    <div class="d-flex gap-2 mt-2">
-                      <v-chip size="small" color="success">
-                        Печатей: {{ countType('stamp') }}
-                      </v-chip>
-                      <v-chip size="small" color="info">
-                        Подписей: {{ countType('signature') }}
-                      </v-chip>
-                    </div>
-                  </v-card-item>
-                </v-card>
-              </v-col>
+        <v-slide-y-transition>
+          <v-card v-if="result" class="mt-4 rounded-lg bg-blue-lighten-5" variant="flat">
+            <v-card-text>
+              <div class="text-overline mb-1">Результат</div>
+              <div class="text-h3 font-weight-bold text-primary mb-2">
+                {{ totalItems }}
+              </div>
+              <div class="d-flex flex-wrap gap-2">
+                <v-chip color="success" label>
+                  <v-icon start size="small">mdi-check-decagram</v-icon>
+                  Печатей: {{ countType('stamp') }}
+                </v-chip>
+                <v-chip color="info" label>
+                  <v-icon start size="small">mdi-draw</v-icon>
+                  Подписей: {{ countType('signature') }}
+                </v-chip>
+              </div>
+            </v-card-text>
+          </v-card>
+        </v-slide-y-transition>
+      </v-col>
 
-              <v-col cols="12" md="8">
-                <v-card class="rounded-lg" title="Детализация по страницам">
-                  <v-list lines="two">
-                    <v-list-group v-for="(page, index) in parsedResult" :key="index" :value="page.page">
-                      <template v-slot:activator="{ props }">
-                        <v-list-item v-bind="props" prepend-icon="mdi-file-document-outline">
-                          <v-list-item-title>Страница {{ page.page }}</v-list-item-title>
-                          <v-list-item-subtitle>
-                            Найдено объектов: {{ page.detections.length }}
-                          </v-list-item-subtitle>
-                        </v-list-item>
-                      </template>
+      <v-col cols="12" md="8">
+        <v-fade-transition mode="out-in">
+          <v-card v-if="!result && !loading" variant="outlined" class="d-flex align-center justify-center pa-12" style="height: 300px; border-style: dashed;">
+            <div class="text-center text-grey">
+              <v-icon size="64" color="grey-lighten-2">mdi-file-find-outline</v-icon>
+              <div class="mt-4 text-h6">Загрузите файл для проверки</div>
+              <div class="text-body-2">Нейросеть найдет все печати и подписи</div>
+            </div>
+          </v-card>
 
-                      <v-list-item
-                        v-for="(det, i) in page.detections"
-                        :key="i"
-                        :prepend-icon="det.name === 'stamp' ? 'mdi-check-decagram' : 'mdi-draw'"
-                      >
-                        <v-list-item-title class="text-capitalize">
-                          {{ det.name === 'stamp' ? 'Печать' : 'Подпись' }}
-                        </v-list-item-title>
-                        <v-list-item-subtitle>
-                          Уверенность: {{ (det.confidence * 100).toFixed(1) }}%
-                          <br />
-                          Координаты: [{{ det.box.x1.toFixed(0) }}, {{ det.box.y1.toFixed(0) }}]
-                        </v-list-item-subtitle>
-                      </v-list-item>
-                    </v-list-group>
-                  </v-list>
-                </v-card>
-              </v-col>
-            </v-row>
+          <div v-else-if="result">
+            <v-card class="rounded-lg" elevation="2">
+              <v-list lines="three">
+                <template v-for="(page, i) in result" :key="i">
+                  <v-list-subheader class="font-weight-bold text-uppercase bg-grey-lighten-4">
+                    Страница {{ page.page }}
+                  </v-list-subheader>
+                  
+                  <template v-if="page.detections && page.detections.length">
+                    <v-list-item
+                      v-for="(item, k) in page.detections"
+                      :key="k"
+                      :prepend-icon="item.name === 'stamp' ? 'mdi-check-decagram' : 'mdi-draw'"
+                    >
+                      <v-list-item-title class="text-capitalize font-weight-bold">
+                        {{ item.name === 'stamp' ? 'Печать' : 'Подпись' }}
+                      </v-list-item-title>
+                      
+                      <v-list-item-subtitle>
+                        <span class="text-green-darken-1">
+                          Точность: {{ (item.confidence * 100).toFixed(1) }}%
+                        </span>
+                        <span class="mx-2">•</span>
+                        Координаты: x={{ item.box.x1.toFixed(0) }}, y={{ item.box.y1.toFixed(0) }}
+                      </v-list-item-subtitle>
+                    </v-list-item>
+                  </template>
+                  
+                  <v-list-item v-else>
+                    <v-list-item-title class="text-grey font-italic">
+                      Объектов не найдено
+                    </v-list-item-title>
+                  </v-list-item>
+                  
+                  <v-divider v-if="i < result.length - 1"></v-divider>
+                </template>
+              </v-list>
+            </v-card>
 
-            <v-expansion-panels class="mt-6">
-              <v-expansion-panel title="Показать технические данные (JSON)">
+            <v-expansion-panels class="mt-4" variant="popout">
+              <v-expansion-panel title="Показать JSON данные">
                 <v-expansion-panel-text>
-                  <pre class="json-code">{{ JSON.stringify(parsedResult, null, 2) }}</pre>
+                  <pre class="code-block">{{ JSON.stringify(result, null, 2) }}</pre>
                 </v-expansion-panel-text>
               </v-expansion-panel>
             </v-expansion-panels>
           </div>
-        </v-expand-transition>
+        </v-fade-transition>
       </v-col>
     </v-row>
   </v-container>
@@ -121,32 +145,17 @@ const result = ref(null);
 const loading = ref(false);
 const errorMessage = ref('');
 
-// Парсим результат, так как бэк может вернуть строку JSON внутри поля
-const parsedResult = computed(() => {
-  if (!result.value) return [];
-  
-  return result.value.map(page => {
-    let detections = page.detections;
-    // Если пришла строка, парсим её
-    if (typeof detections === 'string') {
-      try {
-        detections = JSON.parse(detections);
-      } catch (e) {
-        console.error("Ошибка парсинга JSON детекции", e);
-        detections = [];
-      }
-    }
-    return { ...page, detections };
-  });
+// Подсчет общего количества
+const totalItems = computed(() => {
+  if (!result.value) return 0;
+  return result.value.reduce((acc, page) => acc + (page.detections?.length || 0), 0);
 });
 
-const totalDetections = computed(() => {
-  return parsedResult.value.reduce((acc, page) => acc + page.detections.length, 0);
-});
-
+// Подсчет по типам
 const countType = (type) => {
-  return parsedResult.value.reduce((acc, page) => {
-    return acc + page.detections.filter(d => d.name === type).length;
+  if (!result.value) return 0;
+  return result.value.reduce((acc, page) => {
+    return acc + (page.detections?.filter(d => d.name === type).length || 0);
   }, 0);
 };
 
@@ -158,19 +167,20 @@ const uploadFile = async () => {
   errorMessage.value = '';
 
   const formData = new FormData();
-  // Vuetify 3 иногда возвращает массив файлов, берем первый
+  // Vuetify 3 возвращает массив файлов
   const fileToSend = Array.isArray(file.value) ? file.value[0] : file.value;
   formData.append('file', fileToSend);
 
   try {
     const response = await api.post('/detection/predict', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 30000 // Увеличиваем таймаут до 30 секунд для тяжелых PDF
+      timeout: 60000 // Таймаут 60 секунд (для больших PDF)
     });
+    
     result.value = response.data.results;
   } catch (error) {
     console.error('Ошибка:', error);
-    errorMessage.value = 'Не удалось обработать файл. Попробуйте другой или повторите позже.';
+    errorMessage.value = 'Ошибка при обработке. Проверьте консоль или повторите попытку.';
   } finally {
     loading.value = false;
   }
@@ -178,15 +188,15 @@ const uploadFile = async () => {
 </script>
 
 <style scoped>
-.json-code {
-  background: #f5f5f5;
-  padding: 15px;
-  border-radius: 8px;
-  overflow-x: auto;
-  font-size: 0.85rem;
-  font-family: monospace;
-}
 .gap-2 {
   gap: 8px;
+}
+.code-block {
+  background: #f5f5f5;
+  padding: 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  overflow-x: auto;
+  max-height: 300px;
 }
 </style>

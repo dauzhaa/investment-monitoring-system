@@ -3,13 +3,13 @@ from PIL import Image
 from ultralytics import YOLO
 from pdf2image import convert_from_bytes
 import os
+import json
 
-# Путь к модели (убедитесь, что файл лежит здесь)
+# Путь к модели
 MODEL_PATH = "app/models/yolo_model.pt"
 
 class MLService:
     def __init__(self):
-        # Загружаем модель один раз при старте, если файл существует
         if os.path.exists(MODEL_PATH):
             self.model = YOLO(MODEL_PATH)
         else:
@@ -21,32 +21,35 @@ class MLService:
             return {"error": "Model not loaded"}
 
         images = []
-        # Если PDF, конвертируем в картинки
         if filename.lower().endswith(".pdf"):
             try:
                 images = convert_from_bytes(file_bytes)
             except Exception as e:
                 return {"error": f"PDF conversion failed: {str(e)}"}
         else:
-            # Если картинка
             image = Image.open(io.BytesIO(file_bytes))
             images = [image]
 
         results_data = []
 
         for i, img in enumerate(images):
-            # Прогон через YOLO
             results = self.model(img)
             
             for result in results:
-                # Получаем JSON с координатами
-                json_result = result.to_json()
+                # ИСПРАВЛЕНИЕ: используем to_json()
+                json_str = result.to_json()
+                
+                # Парсим строку в объект, чтобы фронтенд получил нормальный JSON
+                try:
+                    detections = json.loads(json_str)
+                except:
+                    detections = []
+
                 results_data.append({
                     "page": i + 1,
-                    "detections": json_result
+                    "detections": detections
                 })
 
         return results_data
 
-# Создаем глобальный экземпляр сервиса
 ml_service = MLService()
