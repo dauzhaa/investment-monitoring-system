@@ -88,8 +88,8 @@ prometheus_client==0.23.1
 prompt_toolkit==3.0.52
 propcache==0.4.1
 prophet==1.2.1
-psycopg==3.2.3
-psycopg-binary==3.2.3
+psycopg==3.3.3
+psycopg-binary==3.3.3
 psycopg-pool==3.2.7
 psycopg2-binary==2.9.11
 ptyprocess==0.7.0
@@ -140,7 +140,5 @@ wcwidth==0.2.14
 websockets==15.0.1
 XlsxWriter==3.2.0
 yarl==1.22.0
-ultralytics
-pdf2image
 python-multipart
 Pillow
