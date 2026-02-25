@@ -1,9 +1,11 @@
-# backend/app/api/routers/analytics.py
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc
 from app.core.database import get_db
-from app.models import Organization, InvestmentReport, District
+from app.models.organization import Organization
+from app.models.investment_fact import InvestmentFact
+from app.models.investment_forecast import InvestmentForecast
+from app.models.directories import District
 from typing import Optional
 from datetime import date
 
@@ -14,42 +16,50 @@ async def get_dashboard_stats(
     year: int = Query(default=None),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Статистика для дашборда:
-    1. Объем инвестиций ФАКТ и ПЛАН на выбранный год.
-    2. Освоение бюджета (Факт / План * 100).
-    3. Количество организаций с/без инвестиций.
-    """
     if year is None:
         year = date.today().year
-    
-    # Получаем суммы по году
-    stmt = select(
-        func.sum(InvestmentReport.forecast_annual).label('plan'),
-        func.sum(InvestmentReport.fact_annual).label('fact'),
-        func.count(InvestmentReport.id).label('total_reports')
-    ).where(InvestmentReport.year == year)
-    
-    res = await db.execute(stmt)
-    row = res.one()
-    
-    plan_total = float(row.plan or 0)
-    fact_total = float(row.fact or 0)
-    
-    execution = 0
-    if plan_total > 0:
-        execution = round((fact_total / plan_total) * 100, 1)
 
-    # Подсчёт организаций с/без инвестиций
-    orgs_with = await db.execute(
-        select(func.count(func.distinct(InvestmentReport.organization_id)))
-        .where(InvestmentReport.year == year)
-        .where(InvestmentReport.fact_annual > 0)
+    # 1. Считаем ФАКТ
+    fact_subq = (
+        select(
+            InvestmentFact.organization_id,
+            func.max(InvestmentFact.amount).label("max_amount")
+        )
+        .where(InvestmentFact.year == year)
+        .group_by(InvestmentFact.organization_id)
+        .subquery()
     )
-    orgs_with_count = orgs_with.scalar() or 0
+    fact_res = await db.execute(select(func.sum(fact_subq.c.max_amount)))
+    fact_total = float(fact_res.scalar() or 0)
 
-    total_orgs = await db.execute(select(func.count(Organization.id)))
-    total_orgs_count = total_orgs.scalar() or 0
+    # 2. Считаем ПЛАН
+    plan_subq = (
+        select(
+            InvestmentForecast.organization_id,
+            func.max(InvestmentForecast.id).label("max_id")
+        )
+        .where(InvestmentForecast.year == year)
+        .group_by(InvestmentForecast.organization_id)
+        .subquery()
+    )
+    plan_stmt = select(func.sum(InvestmentForecast.forecast_amount)).join(
+        plan_subq, InvestmentForecast.id == plan_subq.c.max_id
+    )
+    plan_res = await db.execute(plan_stmt)
+    plan_total = float(plan_res.scalar() or 0)
+
+    # 3. Выполнение
+    execution = round((fact_total / plan_total) * 100, 1) if plan_total > 0 else 0
+
+    # 4. Организации с инвестициями
+    orgs_with_res = await db.execute(
+        select(func.count(fact_subq.c.organization_id))
+        .where(fact_subq.c.max_amount > 0)
+    )
+    orgs_with_count = orgs_with_res.scalar() or 0
+
+    total_orgs_res = await db.execute(select(func.count(Organization.id)))
+    total_orgs_count = total_orgs_res.scalar() or 0
 
     return {
         "year": year,
@@ -65,9 +75,6 @@ async def get_dashboard_stats(
 
 @router.get("/stats")
 async def get_dashboard_stats_legacy(db: AsyncSession = Depends(get_db)):
-    """
-    Legacy endpoint для обратной совместимости
-    """
     return await get_dashboard_stats(year=date.today().year, db=db)
 
 
@@ -76,24 +83,29 @@ async def get_map_data(
     year: int = Query(default=None),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Данные для раскраски карты районов.
-    """
     if year is None:
         year = date.today().year
         
+    fact_subq = (
+        select(
+            InvestmentFact.organization_id,
+            func.max(InvestmentFact.amount).label("max_amount")
+        )
+        .where(InvestmentFact.year == year)
+        .group_by(InvestmentFact.organization_id)
+        .subquery()
+    )
+
     stmt = select(
         District.name,
-        func.sum(InvestmentReport.fact_annual).label('total')
+        func.sum(fact_subq.c.max_amount).label('total')
     ).select_from(Organization)\
      .join(District, Organization.district_id == District.id)\
-     .join(InvestmentReport, InvestmentReport.organization_id == Organization.id)\
-     .where(InvestmentReport.year == year)\
+     .join(fact_subq, fact_subq.c.organization_id == Organization.id)\
      .group_by(District.name)
 
     res = await db.execute(stmt)
-    data = [{"name": row[0], "value": float(row[1] or 0)} for row in res.all()]
-    return data
+    return [{"name": row[0], "value": float(row[1] or 0)} for row in res.all()]
 
 
 @router.get("/trends")
@@ -101,56 +113,38 @@ async def get_analytics_trends(
     year: int = Query(default=None),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    1. История (динамика по годам).
-    2. Топ-5 Районов.
-    3. Прогноз.
-    """
     if year is None:
         year = date.today().year
     
-    # 1. ИСТОРИЯ ПО ГОДАМ
-    hist_stmt = select(
-        InvestmentReport.year,
-        func.sum(InvestmentReport.fact_annual).label('fact'),
-        func.sum(InvestmentReport.forecast_annual).label('forecast')
-    ).group_by(InvestmentReport.year).order_by(InvestmentReport.year)
+    years_res = await db.execute(select(func.distinct(InvestmentFact.year)))
+    all_years = sorted([y[0] for y in years_res.all() if y[0] is not None])
     
-    hist_res = await db.execute(hist_stmt)
-    history = [
-        {
-            "year": row[0], 
-            "amount": float(row[1] or 0),
-            "forecast": float(row[2] or 0)
-        } 
-        for row in hist_res.all()
-    ]
+    history = []
+    forecast_data = []
+    
+    for y in all_years:
+        # Факт за год (ИСПРАВЛЕНО: добавлено label("max_amount"))
+        f_subq = select(
+            func.max(InvestmentFact.amount).label("max_amount")
+        ).where(InvestmentFact.year == y).group_by(InvestmentFact.organization_id).subquery()
+        
+        f_res = await db.execute(select(func.sum(f_subq.c.max_amount)))
+        fact_sum = float(f_res.scalar() or 0)
+        
+        # Прогноз за год (ИСПРАВЛЕНО: добавлено label("mid"))
+        p_subq = select(
+            func.max(InvestmentForecast.id).label("mid")
+        ).where(InvestmentForecast.year == y).group_by(InvestmentForecast.organization_id).subquery()
+        
+        p_res = await db.execute(select(func.sum(InvestmentForecast.forecast_amount)).join(p_subq, InvestmentForecast.id == p_subq.c.mid))
+        plan_sum = float(p_res.scalar() or 0)
+        
+        history.append({"year": y, "amount": fact_sum, "forecast": plan_sum})
+        if y >= year:
+            forecast_data.append({"year": y, "amount": plan_sum})
 
-    # 2. РЕЙТИНГ ТОП-5 РАЙОНОВ
-    top_stmt = select(
-        District.name,
-        func.sum(InvestmentReport.fact_annual).label("total")
-    ).select_from(Organization)\
-     .join(District, Organization.district_id == District.id)\
-     .join(InvestmentReport, InvestmentReport.organization_id == Organization.id)\
-     .where(InvestmentReport.year == year)\
-     .group_by(District.name)\
-     .order_by(desc("total"))\
-     .limit(5)
-    
-    top_res = await db.execute(top_stmt)
-    rating = [{"name": row[0], "value": float(row[1] or 0)} for row in top_res.all()]
-
-    # 3. ПРОГНОЗ
-    forecast_stmt = select(
-        InvestmentReport.year,
-        func.sum(InvestmentReport.forecast_annual).label("forecast")
-    ).where(InvestmentReport.year >= year)\
-     .group_by(InvestmentReport.year)\
-     .order_by(InvestmentReport.year)
-    
-    forecast_res = await db.execute(forecast_stmt)
-    forecast_data = [{"year": row[0], "amount": float(row[1] or 0)} for row in forecast_res.all()]
+    map_data = await get_map_data(year, db)
+    rating = sorted(map_data, key=lambda x: x['value'], reverse=True)[:5]
 
     return {
         "history": history,
@@ -164,38 +158,33 @@ async def get_quarterly_data(
     year: int = Query(default=None),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Данные по кварталам для выбранного года.
-    """
     if year is None:
         year = date.today().year
 
-    # Получаем суммы по кварталам
-    stmt = select(
-        func.sum(InvestmentReport.fact_q1).label('q1_fact'),
-        func.sum(InvestmentReport.fact_q2).label('q2_fact'),
-        func.sum(InvestmentReport.fact_q3).label('q3_fact'),
-        func.sum(InvestmentReport.fact_q4).label('q4_fact'),
-        func.sum(InvestmentReport.forecast_annual).label('plan_total')
-    ).where(InvestmentReport.year == year)
+    quarters_data = []
     
-    res = await db.execute(stmt)
-    row = res.one()
+    # План (ИСПРАВЛЕНО: добавлено label("mid"))
+    plan_subq = select(
+        func.max(InvestmentForecast.id).label("mid")
+    ).where(InvestmentForecast.year == year).group_by(InvestmentForecast.organization_id).subquery()
     
-    plan_total = float(row.plan_total or 0)
+    plan_res = await db.execute(select(func.sum(InvestmentForecast.forecast_amount)).join(plan_subq, InvestmentForecast.id == plan_subq.c.mid))
+    plan_total = float(plan_res.scalar() or 0)
     plan_per_quarter = plan_total / 4 if plan_total > 0 else 0
-    
-    return [
-        {"quarter": 1, "fact": float(row.q1_fact or 0), "plan": plan_per_quarter},
-        {"quarter": 2, "fact": float(row.q2_fact or 0), "plan": plan_per_quarter},
-        {"quarter": 3, "fact": float(row.q3_fact or 0), "plan": plan_per_quarter},
-        {"quarter": 4, "fact": float(row.q4_fact or 0), "plan": plan_per_quarter}
-    ]
+
+    for q in [1, 2, 3, 4]:
+        stmt = select(func.sum(InvestmentFact.amount)).where(
+            InvestmentFact.year == year,
+            InvestmentFact.quarter == q
+        )
+        res = await db.execute(stmt)
+        fact_sum = float(res.scalar() or 0)
+        
+        quarters_data.append({"quarter": q, "fact": fact_sum, "plan": plan_per_quarter})
+        
+    return quarters_data
 
 
 @router.post("/calculate/clustering")
 async def calculate_clusters():
-    """
-    Запуск кластеризации организаций (заглушка).
-    """
     return {"status": "success", "message": "Clustering updated"}

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.core.database import get_db
-from app.models.dictionaries import District, Okved
+from app.models.directories import District, Okved
 
 router = APIRouter()
 

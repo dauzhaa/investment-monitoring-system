@@ -1,81 +1,77 @@
-# backend/app/api/routers/districts.py
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from app.core.database import get_db
-from app.models import District, Organization, InvestmentReport
+from app.models.directories import District
+from app.models.organization import Organization
+from app.models.investment_fact import InvestmentFact
+from app.models.investment_forecast import InvestmentForecast
+from datetime import date
 
 router = APIRouter()
 
 @router.get("/{district_name}")
-async def get_district_details(
-    district_name: str,
-    db: AsyncSession = Depends(get_db)
-):
-
-    district_res = await db.execute(
-        select(District).where(District.name == district_name)
-    )
-    district = district_res.scalar_one_or_none()
-    
+async def get_district_details(district_name: str, db: AsyncSession = Depends(get_db)):
+    district = (await db.execute(select(District).where(District.name == district_name))).scalar_one_or_none()
     if not district:
         raise HTTPException(status_code=404, detail="Район не найден")
     
-    orgs_res = await db.execute(
-        select(Organization).where(Organization.district_id == district.id)
-    )
-    organizations = orgs_res.scalars().all()
-    org_ids = [org.id for org in organizations]
+    orgs = (await db.execute(select(Organization).where(Organization.district_id == district.id))).scalars().all()
+    org_ids = [org.id for org in orgs]
+    current_year = date.today().year
     
-    current_year = 2025
-    investment_stats = await db.execute(
-        select(
-            func.sum(InvestmentReport.forecast_annual).label('forecast'),
-            func.sum(InvestmentReport.fact_annual).label('fact')
-        ).where(
-            InvestmentReport.organization_id.in_(org_ids),
-            InvestmentReport.year == current_year
-        )
-    )
-    stats = investment_stats.one()
+    # План
+    plan_subq = select(InvestmentForecast.organization_id, func.max(InvestmentForecast.id).label("mid")).where(
+        InvestmentForecast.organization_id.in_(org_ids), InvestmentForecast.year == current_year
+    ).group_by(InvestmentForecast.organization_id).subquery()
     
-    history_res = await db.execute(
-        select(
-            InvestmentReport.year,
-            func.sum(InvestmentReport.fact_annual)
-        ).where(
-            InvestmentReport.organization_id.in_(org_ids)
-        ).group_by(InvestmentReport.year).order_by(InvestmentReport.year)
+    plan_res = await db.execute(
+        select(InvestmentForecast.organization_id, InvestmentForecast.forecast_amount)
+        .join(plan_subq, InvestmentForecast.id == plan_subq.c.mid)
     )
-    history = [{"year": row[0], "amount": round(row[1] or 0, 2)} for row in history_res.all()]
+    plans = dict(plan_res.all())
+    
+    # Факт (текущий год)
+    fact_res = await db.execute(
+        select(InvestmentFact.organization_id, func.max(InvestmentFact.amount))
+        .where(InvestmentFact.organization_id.in_(org_ids), InvestmentFact.year == current_year)
+        .group_by(InvestmentFact.organization_id)
+    )
+    facts = dict(fact_res.all())
+    
+    # История фактов по годам
+    hist_subq = select(InvestmentFact.year, InvestmentFact.organization_id, func.max(InvestmentFact.amount).label("max_amt")).where(
+        InvestmentFact.organization_id.in_(org_ids)
+    ).group_by(InvestmentFact.year, InvestmentFact.organization_id).subquery()
+    
+    hist_res = await db.execute(
+        select(hist_subq.c.year, func.sum(hist_subq.c.max_amt))
+        .group_by(hist_subq.c.year).order_by(hist_subq.c.year)
+    )
+    history = [{"year": row[0], "amount": round(float(row[1] or 0), 2)} for row in hist_res.all()]
+    
+    total_forecast = sum(plans.values())
+    total_fact = sum(facts.values())
     
     orgs_data = []
-    for org in organizations:
-        report_res = await db.execute(
-            select(InvestmentReport).where(
-                InvestmentReport.organization_id == org.id,
-                InvestmentReport.year == current_year
-            )
-        )
-        report = report_res.scalar_one_or_none()
-        
+    for org in orgs:
         orgs_data.append({
             "id": org.id,
             "name": org.name,
             "inn": org.inn,
-            "forecast": report.forecast_annual if report else 0,
-            "fact": report.fact_annual if report else 0
+            "forecast": float(plans.get(org.id, 0)),
+            "fact": float(facts.get(org.id, 0))
         })
     
     return {
         "district": {
             "name": district.name,
-            "organizations_count": len(organizations)
+            "organizations_count": len(orgs)
         },
         "stats": {
-            "forecast": round(stats[0] or 0, 2),
-            "fact": round(stats[1] or 0, 2),
-            "execution_percent": round((stats[1] / stats[0] * 100) if stats[0] else 0, 1)
+            "forecast": round(total_forecast, 2),
+            "fact": round(total_fact, 2),
+            "execution_percent": round((total_fact / total_forecast * 100) if total_forecast else 0, 1)
         },
         "history": history,
         "organizations": orgs_data

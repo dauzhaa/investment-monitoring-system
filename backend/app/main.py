@@ -9,7 +9,7 @@ from app.core.config import settings
 from app.api.endpoints import auth, reports
 from app.api.routers import organizations
 from app.api.routers import monitoring
-from app.api.routers import detection
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -97,7 +97,6 @@ app.include_router(
     tags=["6. Dictionaries"]
 )
 
-app.include_router(detection.router, prefix="/api/v1/detection", tags=["detection"])
 
 @app.get("/")
 async def root():
