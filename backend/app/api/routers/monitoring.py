@@ -10,9 +10,11 @@ from app.models.investment_forecast import InvestmentForecast
 from typing import Optional
 from datetime import date
 import logging
+from app.utils.bulk_import import process_file
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+UPLOAD_DIR = "/app/data/uploads"
 
 @router.get("/status")
 async def get_monitoring_status(

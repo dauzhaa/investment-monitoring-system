@@ -19,7 +19,6 @@ logger = logging.getLogger(__name__)
 REPORTS_DIR = "/app/data/reports"
 
 def calculate_deadline(year: int, quarter: int | None) -> date:
-    """Расчет дедлайна сдачи отчета"""
     if quarter == 1: return date(year, 4, 20)
     elif quarter == 2: return date(year, 7, 20)
     elif quarter == 3: return date(year, 10, 20)
@@ -40,8 +39,19 @@ def clean_inn(inn_val) -> str | None:
     cleaned = str(inn_val).split('.')[0].strip()
     return cleaned if cleaned.isdigit() else None
 
-async def process_file(file_path: str, year: int, quarter: int | None, db: AsyncSession):
-    """Парсинг одного xlsx файла"""
+def safe_parse_float(val) -> float:
+    """Безопасный парсинг грязных чисел из Excel (пробелы, запятые)"""
+    if val is None:
+        return 0.0
+    if isinstance(val, (int, float)):
+        return float(val)
+    try:
+        cleaned = str(val).replace(" ", "").replace("\xa0", "").replace(",", ".")
+        return float(cleaned)
+    except ValueError:
+        return 0.0
+
+async def process_file(file_path: str, year: int, quarter: int | None, db: AsyncSession) -> bool:
     try:
         wb = openpyxl.load_workbook(file_path, data_only=True)
         ws = wb.active
@@ -52,8 +62,8 @@ async def process_file(file_path: str, year: int, quarter: int | None, db: Async
             "is_smp": str(ws["D3"].value).strip().lower() == "да" if ws["D3"].value else False,
             "okpo": str(ws["E3"].value).split('.')[0] if ws["E3"].value else None,
             "okved_code": str(ws["F3"].value).strip() if ws["F3"].value else None,
-            "forecast": float(ws["G3"].value) if ws["G3"].value and str(ws["G3"].value).replace('.','',1).isdigit() else 0.0,
-            "amount": float(ws["H3"].value) if ws["H3"].value and str(ws["H3"].value).replace('.','',1).isdigit() else 0.0,
+            "forecast": safe_parse_float(ws["G3"].value),
+            "amount": safe_parse_float(ws["H3"].value),
             "submit_date": parse_date(ws["I3"].value),
             "reason": str(ws["J3"].value).strip() if ws["J3"].value else None,
         }
@@ -62,113 +72,103 @@ async def process_file(file_path: str, year: int, quarter: int | None, db: Async
         if not row_data["inn"]:
             return False
 
-        # --- 1. Поиск организации ---
-        org = (await db.execute(select(Organization).where(Organization.inn == row_data["inn"]))).scalar_one_or_none()
-        if not org:
-            org = Organization(name=str(row_data["name"])[:512], inn=row_data["inn"])
-            db.add(org)
-            await db.flush()
-
-        # --- 2. ОКВЭД ---
-        if row_data["okved_code"]:
-            okved_obj = (await db.execute(select(Okved).where(Okved.code == row_data["okved_code"]))).scalar_one_or_none()
-            if not okved_obj:
-                okved_obj = Okved(code=row_data["okved_code"])
-                db.add(okved_obj)
+        # Изолируем транзакцию для конкретного файла
+        async with db.begin_nested():
+            org = (await db.execute(select(Organization).where(Organization.inn == row_data["inn"]))).scalar_one_or_none()
+            if not org:
+                org = Organization(name=str(row_data["name"])[:512], inn=row_data["inn"])
+                db.add(org)
                 await db.flush()
-            if not org.okved_id:
-                org.okved_id = okved_obj.id
 
-        # --- 3. Факты (InvestmentFact) ---
-        report_type = 'p2_quarterly' if quarter else 'p2_annual'
-        fact = (await db.execute(
-            select(InvestmentFact).where(
-                InvestmentFact.organization_id == org.id,
-                InvestmentFact.year == year,
-                InvestmentFact.quarter == quarter,
-                InvestmentFact.report_type == report_type
-            )
-        )).scalar_one_or_none()
+            if row_data["okved_code"]:
+                okved_obj = (await db.execute(select(Okved).where(Okved.code == row_data["okved_code"]))).scalar_one_or_none()
+                if not okved_obj:
+                    okved_obj = Okved(code=row_data["okved_code"])
+                    db.add(okved_obj)
+                    await db.flush()
+                if not org.okved_id:
+                    org.okved_id = okved_obj.id
 
-        if fact:
-            fact.amount = row_data["amount"]
-            fact.no_investment_reason = row_data["reason"]
-        else:
-            db.add(InvestmentFact(
-                organization_id=org.id, year=year, quarter=quarter,
-                report_type=report_type, amount=row_data["amount"],
-                no_investment_reason=row_data["reason"]
-            ))
+            report_type = 'p2_quarterly' if quarter else 'p2_annual'
+            fact = (await db.execute(
+                select(InvestmentFact).where(
+                    InvestmentFact.organization_id == org.id,
+                    InvestmentFact.year == year,
+                    InvestmentFact.quarter == quarter,
+                    InvestmentFact.report_type == report_type
+                )
+            )).scalar_one_or_none()
 
-        # --- 4. Прогнозы (InvestmentForecast) ---
-        if row_data["forecast"] > 0:
-            existing_forecasts = (await db.execute(
-                select(InvestmentForecast)
-                .where(InvestmentForecast.organization_id == org.id, InvestmentForecast.year == year)
-                .order_by(InvestmentForecast.id.desc())
-            )).scalars().all()
-
-            if not existing_forecasts:
-                db.add(InvestmentForecast(
-                    organization_id=org.id, year=year,
-                    forecast_amount=row_data["forecast"], forecast_type='initial'
-                ))
+            if fact:
+                fact.amount = row_data["amount"]
+                fact.no_investment_reason = row_data["reason"]
             else:
-                last_forecast = existing_forecasts[0]
-                if last_forecast.forecast_amount != row_data["forecast"]:
-                    rev_date = row_data["submit_date"] or date.today()
-                    
-                    # ПРОВЕРКА: есть ли уже уточнение на ЭТУ ЖЕ дату?
-                    same_date_forecast = next(
-                        (f for f in existing_forecasts if f.forecast_type == 'revised' and f.revision_date == rev_date), 
-                        None
-                    )
-                    
-                    if same_date_forecast:
-                        # Если есть - просто обновляем сумму
-                        same_date_forecast.forecast_amount = row_data["forecast"]
-                    else:
-                        # Если нет - создаем новую ревизию
-                        db.add(InvestmentForecast(
-                            organization_id=org.id, year=year,
-                            forecast_amount=row_data["forecast"], forecast_type='revised',
-                            revision_date=rev_date
-                        ))
+                db.add(InvestmentFact(
+                    organization_id=org.id, year=year, quarter=quarter,
+                    report_type=report_type, amount=row_data["amount"],
+                    no_investment_reason=row_data["reason"]
+                ))
 
-        # --- 5. Мониторинг (ReportSubmission) ---
-        sub_quarter = quarter if quarter else 4
-        subm = (await db.execute(
-            select(ReportSubmission).where(
-                ReportSubmission.organization_id == org.id,
-                ReportSubmission.year == year,
-                ReportSubmission.quarter == sub_quarter
-            )
-        )).scalar_one_or_none()
+            if row_data["forecast"] > 0:
+                existing_forecasts = (await db.execute(
+                    select(InvestmentForecast)
+                    .where(InvestmentForecast.organization_id == org.id, InvestmentForecast.year == year)
+                    .order_by(InvestmentForecast.id.desc())
+                )).scalars().all()
 
-        deadline = calculate_deadline(year, quarter)
-        status = 'submitted' if row_data["submit_date"] else 'pending'
-        
-        days_overdue = 0
-        if status == 'pending' and date.today() > deadline:
-            status = 'overdue'
-            days_overdue = (date.today() - deadline).days
-        elif status == 'submitted' and row_data["submit_date"] > deadline:
-            days_overdue = (row_data["submit_date"] - deadline).days
+                if not existing_forecasts:
+                    db.add(InvestmentForecast(
+                        organization_id=org.id, year=year,
+                        forecast_amount=row_data["forecast"], forecast_type='initial'
+                    ))
+                else:
+                    last_forecast = existing_forecasts[0]
+                    if last_forecast.forecast_amount != row_data["forecast"]:
+                        rev_date = row_data["submit_date"] or date.today()
+                        same_date_forecast = next((f for f in existing_forecasts if f.forecast_type == 'revised' and f.revision_date == rev_date), None)
+                        
+                        if same_date_forecast:
+                            same_date_forecast.forecast_amount = row_data["forecast"]
+                        else:
+                            db.add(InvestmentForecast(
+                                organization_id=org.id, year=year,
+                                forecast_amount=row_data["forecast"], forecast_type='revised',
+                                revision_date=rev_date
+                            ))
 
-        if subm:
-            subm.submitted_date = row_data["submit_date"]
-            subm.status = status
-            subm.days_overdue = days_overdue
-        else:
-            db.add(ReportSubmission(
-                organization_id=org.id, year=year, quarter=sub_quarter,
-                deadline_date=deadline, submitted_date=row_data["submit_date"],
-                status=status, days_overdue=days_overdue
-            ))
+            sub_quarter = quarter if quarter else 4
+            subm = (await db.execute(
+                select(ReportSubmission).where(
+                    ReportSubmission.organization_id == org.id,
+                    ReportSubmission.year == year,
+                    ReportSubmission.quarter == sub_quarter
+                )
+            )).scalar_one_or_none()
+
+            deadline = calculate_deadline(year, quarter)
+            status = 'submitted' if row_data["submit_date"] else 'pending'
+            
+            days_overdue = 0
+            if status == 'pending' and date.today() > deadline:
+                status = 'overdue'
+                days_overdue = (date.today() - deadline).days
+            elif status == 'submitted' and row_data["submit_date"] > deadline:
+                days_overdue = (row_data["submit_date"] - deadline).days
+
+            if subm:
+                subm.submitted_date = row_data["submit_date"]
+                subm.status = status
+                subm.days_overdue = days_overdue
+            else:
+                db.add(ReportSubmission(
+                    organization_id=org.id, year=year, quarter=sub_quarter,
+                    deadline_date=deadline, submitted_date=row_data["submit_date"],
+                    status=status, days_overdue=days_overdue
+                ))
 
         return True
+        
     except Exception as e:
-        await db.rollback() # Сбрасываем поломанную транзакцию
         logger.error(f"❌ Ошибка парсинга файла {file_path}: {e}")
         return False
 
@@ -213,7 +213,7 @@ async def run_import():
                     
                     if processed_total % 100 == 0:
                         await db.commit()
-                        logger.info(f"    ⏳ Обработано {processed_total} файлов...")
+                        logger.info(f"    ⏳ Закоммичено {processed_total} файлов...")
 
         await db.commit()
         logger.info(f"✅ Импорт успешно завершен! Всего обработано файлов: {processed_total}")

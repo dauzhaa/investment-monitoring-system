@@ -78,34 +78,35 @@ async def get_dashboard_stats_legacy(db: AsyncSession = Depends(get_db)):
     return await get_dashboard_stats(year=date.today().year, db=db)
 
 
+# Замени только функцию get_map_data внутри файла analytics.py
 @router.get("/map")
 async def get_map_data(
-    year: int = Query(default=None),
+    start_year: int = Query(default=2022),
+    end_year: int = Query(default=2026),
     db: AsyncSession = Depends(get_db)
 ):
-    if year is None:
-        year = date.today().year
-        
     fact_subq = (
         select(
             InvestmentFact.organization_id,
+            InvestmentFact.year,
             func.max(InvestmentFact.amount).label("max_amount")
         )
-        .where(InvestmentFact.year == year)
-        .group_by(InvestmentFact.organization_id)
+        .where(InvestmentFact.year >= start_year)
+        .where(InvestmentFact.year <= end_year)
+        .group_by(InvestmentFact.organization_id, InvestmentFact.year)
         .subquery()
     )
 
     stmt = select(
-        District.name,
+        func.coalesce(District.name, 'Не распределено').label('district_name'),
         func.sum(fact_subq.c.max_amount).label('total')
     ).select_from(Organization)\
-     .join(District, Organization.district_id == District.id)\
      .join(fact_subq, fact_subq.c.organization_id == Organization.id)\
+     .outerjoin(District, Organization.district_id == District.id)\
      .group_by(District.name)
 
     res = await db.execute(stmt)
-    return [{"name": row[0], "value": float(row[1] or 0)} for row in res.all()]
+    return [{"name": row.district_name, "value": float(row.total or 0)} for row in res.all()]
 
 
 @router.get("/trends")

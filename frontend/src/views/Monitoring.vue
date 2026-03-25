@@ -109,18 +109,51 @@
             {{ getStatusText(item.status) }}
           </v-chip>
         </template>
-        <template v-slot:item.actions="{ item }">
-          <v-btn
-            v-if="item.status === 'submitted'"
-            icon
-            size="small"
-            variant="text"
-            color="#5C6BC0"
-            @click="downloadOrgReport(item)"
-          >
-            <v-icon>mdi-download</v-icon>
-          </v-btn>
-          <span v-else class="text-grey">—</span>
+        <template #item.actions="{ item }">
+          <div class="d-flex gap-1 align-center justify-end">
+            <v-btn
+              icon
+              size="x-small"
+              variant="text"
+              color="#1B3A5C"
+              @click="triggerFileInput(item.id)"
+              :loading="uploadingId === item.id"
+            >
+              <v-icon>mdi-upload</v-icon>
+              <v-tooltip activator="parent" location="top">Загрузить П-2</v-tooltip>
+            </v-btn>
+
+            <input 
+              type="file" 
+              :ref="el => fileInputs[item.id] = el" 
+              style="display: none" 
+              accept=".xlsx"
+              @change="handleFileUpload($event, item.id)"
+            />
+
+            <v-btn
+              v-if="item.status === 'overdue'"
+              icon
+              size="x-small"
+              variant="text"
+              color="#F57C00"
+              @click="sendReminder(item)"
+            >
+              <v-icon>mdi-email-outline</v-icon>
+              <v-tooltip activator="parent" location="top">Напомнить</v-tooltip>
+            </v-btn>
+            
+            <v-btn
+              v-if="item.status === 'submitted'"
+              icon
+              size="x-small"
+              variant="text"
+              color="#2E7D32"
+            >
+              <v-icon>mdi-download</v-icon>
+              <v-tooltip activator="parent" location="top">Скачать отчёт</v-tooltip>
+            </v-btn>
+          </div>
         </template>
         
         <!-- Кастомный footer с русским текстом -->
@@ -360,4 +393,46 @@ const fetchData = async () => {
 
 watch([selectedYear, selectedPeriod], fetchData);
 onMounted(fetchData);
+
+const fileInputs = ref({})
+const uploadingId = ref(null)
+
+const triggerFileInput = (orgId) => {
+  if (fileInputs.value[orgId]) {
+    fileInputs.value[orgId].click()
+  }
+}
+
+const handleFileUpload = async (event, orgId) => {
+  const file = event.target.files[0]
+  if (!file) return
+
+  uploadingId.value = orgId
+  const formData = new FormData()
+  formData.append('file', file)
+
+  try {
+    let uploadUrl = `/monitoring/upload/${orgId}?year=${selectedYear.value}`
+    if (selectedQuarter.value) {
+      uploadUrl += `&quarter=${selectedQuarter.value}`
+    }
+
+    // api уже настроен с withCredentials: true
+    await api.post(uploadUrl, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    
+    snackbarText.value = 'Отчет успешно загружен!'
+    snackbarColor.value = 'success'
+    snackbar.value = true
+    await loadStatus() // Обновляем таблицу
+  } catch (error) {
+    snackbarText.value = error.response?.data?.detail || 'Ошибка загрузки файла'
+    snackbarColor.value = 'error'
+    snackbar.value = true
+  } finally {
+    uploadingId.value = null
+    event.target.value = ''
+  }
+}
 </script>
