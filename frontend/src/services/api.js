@@ -6,15 +6,25 @@ const api = axios.create({
   baseURL: API_BASE,
   timeout: 30000,
   headers: { 'Content-Type': 'application/json' },
-  withCredentials: true // Обязательно для сессионных куки
+  withCredentials: true 
 })
 
-// Обработка 401: если кука истекла или отсутствует
+// ВОЗВРАЩАЕМ ПЕРЕХВАТЧИК ТОКЕНА
+api.interceptors.request.use(config => {
+  const token = localStorage.getItem('access_token')
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
+// Interceptor: обработка 401 (Неавторизован)
 api.interceptors.response.use(
   response => response,
   error => {
     if (error.response?.status === 401) {
       localStorage.removeItem('user')
+      localStorage.removeItem('access_token')
       window.location.href = '/login'
     }
     return Promise.reject(error)
@@ -23,27 +33,43 @@ api.interceptors.response.use(
 
 export default api
 
-// ============ AUTH ============
+// ============ AUTH & VERIFICATION ============
 export const authAPI = {
   login(email, password) {
     const formData = new URLSearchParams()
     formData.append('username', email)
     formData.append('password', password)
+    // ИСПРАВЛЕНО: теперь стучимся на /auth/login
     return api.post('/auth/login', formData, {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
     })
   },
-  logout() {
-    return api.post('/auth/logout')
-  },
   testToken() {
     return api.get('/auth/me')
   },
-  requestVerification() {
+  requestEmailVerification() {
     return api.post('/auth/request-verification')
   },
-  verifyEmail(code) {
-    return api.post('/auth/verify-email', { code })
+  verifyEmail(data) {
+    return api.post('/auth/verify-email', data)
+  }
+}
+// ============ AUDIT & NOTIFICATIONS (НОВОЕ) ============
+export const auditAPI = {
+  getLogs(params) {
+    return api.get('/audit/', { params })
+  }
+}
+
+export const notificationsAPI = {
+  getMy() {
+    return api.get('/notifications/')
+  },
+  markRead(id) {
+    return api.put(`/notifications/${id}/read`)
+  },
+  send(data) {
+    return api.post('/notifications/send', data)
   }
 }
 

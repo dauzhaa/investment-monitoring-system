@@ -1,438 +1,358 @@
 <template>
-  <v-container fluid>
-    <h1 class="text-h4 font-weight-bold mb-6">Мониторинг сдачи отчётности</h1>
+  <div class="monitoring">
+    <v-card class="stat-card pa-4 mb-5">
+      <v-row align="center" dense>
+        <v-col cols="12" sm="3">
+          <v-select
+            v-model="selectedYear"
+            :items="[2022, 2023, 2024, 2025]"
+            label="Год"
+            variant="outlined"
+            density="compact"
+            hide-details
+          />
+        </v-col>
+        <v-col cols="12" sm="3">
+          <v-select
+            v-model="selectedQuarter"
+            :items="quarterOptions"
+            item-title="title"
+            item-value="value"
+            label="Период"
+            variant="outlined"
+            density="compact"
+            hide-details
+          />
+        </v-col>
+        <v-col cols="12" sm="3">
+          <v-select
+            v-model="selectedDistricts"
+            :items="districts"
+            item-title="name"
+            item-value="name"
+            label="Район"
+            variant="outlined"
+            density="compact"
+            hide-details
+            clearable
+            multiple
+            chips
+          />
+        </v-col>
+        <v-col cols="12" sm="3" class="d-flex gap-2">
+          <v-btn color="#1B3A5C" variant="flat" @click="loadStatus" :loading="loading" block>
+            <v-icon start>mdi-magnify</v-icon>
+            Показать
+          </v-btn>
+        </v-col>
+      </v-row>
+    </v-card>
 
-    <!-- Фильтры -->
-    <v-row class="mb-4" align="center">
-      <v-col cols="12" sm="6" md="2">
-        <v-select
-          v-model="selectedYear"
-          :items="availableYears"
-          label="Год"
-          variant="outlined"
-          density="compact"
-          hide-details
-        ></v-select>
+    <v-row class="mb-4">
+      <v-col cols="6" sm="3">
+        <v-card class="stat-card pa-4 text-center">
+          <div class="kpi-value" style="color: #1B3A5C">{{ statusData.total }}</div>
+          <div class="kpi-label">Всего</div>
+        </v-card>
       </v-col>
-      <v-col cols="12" sm="6" md="3">
-        <v-select
-          v-model="selectedPeriod"
-          :items="periods"
-          item-title="title"
-          item-value="value"
-          label="Период"
-          variant="outlined"
-          density="compact"
-          hide-details
-        ></v-select>
+      <v-col cols="6" sm="3">
+        <v-card class="stat-card pa-4 text-center">
+          <div class="kpi-value" style="color: #2E7D32">{{ statusData.submitted }}</div>
+          <div class="kpi-label">Сдано</div>
+        </v-card>
       </v-col>
-      <v-col cols="12" sm="6" md="3">
-        <v-select
-          v-model="selectedDistrict"
-          :items="districts"
-          label="Районы"
-          variant="outlined"
-          density="compact"
-          hide-details
-          clearable
-        ></v-select>
+      <v-col cols="6" sm="3">
+        <v-card class="stat-card pa-4 text-center">
+          <div class="kpi-value" style="color: #D32F2F">{{ statusData.overdue }}</div>
+          <div class="kpi-label">Просрочено</div>
+        </v-card>
       </v-col>
-      <v-col cols="12" sm="6" md="2">
-        <v-btn color="#5C6BC0" variant="flat" @click="showAdvancedFilters = true" block>
-          <v-icon class="mr-2">mdi-filter</v-icon>
-          Фильтры
-        </v-btn>
-      </v-col>
-      <v-col cols="12" sm="6" md="2">
-        <v-btn color="#26A69A" variant="flat" @click="downloadReport" block :loading="exporting">
-          <v-icon class="mr-2">mdi-download</v-icon>
-          Скачать отчёт
-        </v-btn>
+      <v-col cols="6" sm="3">
+        <v-card class="stat-card pa-4 text-center">
+          <div class="kpi-value" style="color: #9E9E9E">{{ statusData.not_planned }}</div>
+          <div class="kpi-label">Не запланировано</div>
+        </v-card>
       </v-col>
     </v-row>
 
-    <!-- Сводка - мягкие цвета в стиле Dashboard -->
-    <v-card class="mb-4 rounded-lg" elevation="2" :style="{ background: 'linear-gradient(135deg, #5C6BC0 0%, #7986CB 100%)' }">
-      <v-card-text class="py-5">
-        <div class="text-center text-white mb-3 text-body-1">
-          Отчёт об инвестициях за {{ periodTitle }} {{ selectedYear }} года
-        </div>
-        <v-row align="center" justify="center">
-          <v-col cols="4" class="text-center">
-            <div class="text-h3 font-weight-bold text-white">{{ summary.total }}</div>
-            <div class="text-white text-body-2">Всего орг.</div>
-          </v-col>
-          <v-col cols="4" class="text-center">
-            <div class="text-h3 font-weight-bold" style="color: #A5D6A7;">{{ summary.submitted }}</div>
-            <div class="text-white text-body-2">Сдали отчёт</div>
-          </v-col>
-          <v-col cols="4" class="text-center">
-            <div class="text-h3 font-weight-bold" style="color: #FFAB91;">{{ summary.overdue }}</div>
-            <div class="text-white text-body-2">Просрочено</div>
-          </v-col>
-        </v-row>
-        <v-progress-linear
-          :model-value="summary.percent"
-          color="#A5D6A7"
-          bg-color="rgba(255,255,255,0.3)"
-          height="14"
-          rounded
-          class="mt-4"
-        >
-          <template v-slot:default>
-            <span class="text-white text-caption font-weight-bold">{{ summary.percent }}%</span>
-          </template>
-        </v-progress-linear>
-      </v-card-text>
+    <v-card class="stat-card pa-4 mb-5">
+      <div class="d-flex align-center justify-space-between mb-2">
+        <span class="text-body-2 font-weight-bold">Прогресс сдачи</span>
+        <span class="text-h6 font-weight-black" :style="{ color: statusData.percent >= 80 ? '#2E7D32' : '#F57C00' }">
+          {{ statusData.percent }}%
+        </span>
+      </div>
+      <v-progress-linear
+        :model-value="statusData.percent"
+        :color="statusData.percent >= 80 ? '#2E7D32' : statusData.percent >= 50 ? '#F57C00' : '#D32F2F'"
+        height="10"
+        rounded
+      />
     </v-card>
 
-    <!-- Таблица с русской локализацией -->
-    <v-card class="rounded-lg" elevation="2">
+    <div class="d-flex justify-end gap-2 mb-3">
+      <v-btn
+        variant="tonal"
+        color="#D32F2F"
+        size="small"
+        prepend-icon="mdi-email-alert-outline"
+        @click="sendAllReminders"
+        :disabled="statusData.overdue === 0"
+      >
+        Напомнить всем ({{ statusData.overdue }})
+      </v-btn>
+      <v-btn
+        variant="tonal"
+        color="#1B3A5C"
+        size="small"
+        prepend-icon="mdi-download"
+        @click="exportData"
+      >
+        Экспорт в Excel
+      </v-btn>
+    </div>
+
+    <v-card class="stat-card">
+      <v-text-field
+        v-model="search"
+        prepend-inner-icon="mdi-magnify"
+        placeholder="Поиск по названию или ИНН..."
+        variant="solo-filled"
+        density="compact"
+        flat
+        hide-details
+        class="ma-2"
+      />
       <v-data-table
         :headers="headers"
-        :items="filteredOrganizations"
-        :items-per-page="itemsPerPage"
-        :loading="loading"
-        class="elevation-0"
-        :items-per-page-options="itemsPerPageOptions"
-        :items-per-page-text="'Записей на странице'"
-        :page-text="'{0}-{1} из {2}'"
-        :no-data-text="'Нет данных'"
-        :loading-text="'Загрузка...'"
+        :items="filteredItems"
+        :search="search"
+        :items-per-page="25"
+        density="compact"
+        hover
+        class="monitoring-table"
       >
-        <template v-slot:item.status="{ item }">
+        <template #item.status="{ item }">
           <v-chip
-            :color="getStatusColor(item.status)"
+            :color="statusColor(item.status)"
             size="small"
-            variant="flat"
+            variant="tonal"
+            label
           >
-            {{ getStatusText(item.status) }}
+            {{ statusText(item.status) }}
           </v-chip>
         </template>
-        <template #item.actions="{ item }">
-          <div class="d-flex gap-1 align-center justify-end">
-            <v-btn
-              icon
-              size="x-small"
-              variant="text"
-              color="#1B3A5C"
-              @click="triggerFileInput(item.id)"
-              :loading="uploadingId === item.id"
-            >
-              <v-icon>mdi-upload</v-icon>
-              <v-tooltip activator="parent" location="top">Загрузить П-2</v-tooltip>
-            </v-btn>
 
-            <input 
-              type="file" 
-              :ref="el => fileInputs[item.id] = el" 
-              style="display: none" 
-              accept=".xlsx"
-              @change="handleFileUpload($event, item.id)"
-            />
-
-            <v-btn
-              v-if="item.status === 'overdue'"
-              icon
-              size="x-small"
-              variant="text"
-              color="#F57C00"
-              @click="sendReminder(item)"
-            >
-              <v-icon>mdi-email-outline</v-icon>
-              <v-tooltip activator="parent" location="top">Напомнить</v-tooltip>
-            </v-btn>
-            
-            <v-btn
-              v-if="item.status === 'submitted'"
-              icon
-              size="x-small"
-              variant="text"
-              color="#2E7D32"
-            >
-              <v-icon>mdi-download</v-icon>
-              <v-tooltip activator="parent" location="top">Скачать отчёт</v-tooltip>
-            </v-btn>
-          </div>
+        <template #item.is_smp="{ item }">
+          <v-icon v-if="item.is_smp" size="18" color="#2E7D32">mdi-check-circle</v-icon>
+          <span v-else class="text-grey">—</span>
         </template>
-        
-        <!-- Кастомный footer с русским текстом -->
-        <template v-slot:bottom>
-          <div class="d-flex align-center justify-end pa-4">
-            <span class="text-body-2 mr-4">Записей на странице:</span>
-            <v-select
-              v-model="itemsPerPage"
-              :items="[10, 15, 25, 50]"
-              density="compact"
-              variant="outlined"
-              hide-details
-              style="max-width: 80px;"
-              class="mr-4"
-            ></v-select>
-            <span class="text-body-2">
-              {{ paginationText }}
-            </span>
-            <v-btn icon size="small" :disabled="currentPage <= 1" @click="currentPage--" class="ml-2">
-              <v-icon>mdi-chevron-left</v-icon>
-            </v-btn>
-            <v-btn icon size="small" :disabled="currentPage >= totalPages" @click="currentPage++">
-              <v-icon>mdi-chevron-right</v-icon>
-            </v-btn>
-          </div>
+
+        <template #item.actions="{ item }">
+          <v-btn
+            v-if="item.status === 'overdue'"
+            icon
+            size="x-small"
+            variant="text"
+            color="#F57C00"
+            @click="sendReminder(item)"
+          >
+            <v-icon>mdi-email-outline</v-icon>
+            <v-tooltip activator="parent" location="top">Напомнить</v-tooltip>
+          </v-btn>
+          <v-btn
+            v-if="item.status === 'submitted'"
+            icon
+            size="x-small"
+            variant="text"
+            color="#1B3A5C"
+          >
+            <v-icon>mdi-download</v-icon>
+            <v-tooltip activator="parent" location="top">Скачать отчёт</v-tooltip>
+          </v-btn>
         </template>
       </v-data-table>
     </v-card>
 
-    <!-- Диалог расширенных фильтров -->
-    <v-dialog v-model="showAdvancedFilters" max-width="500">
-      <v-card>
-        <v-card-title class="text-h6" style="background: #5C6BC0; color: white;">
-          Расширенные фильтры
+    <v-dialog v-model="reminderDialog" max-width="500">
+      <v-card class="stat-card pa-2">
+        <v-card-title class="text-h6 font-weight-bold pt-4 px-4" style="color: #1B3A5C;">
+          Отправка уведомления
         </v-card-title>
-        <v-card-text class="pa-4">
-          <v-select
-            v-model="filterStatus"
-            :items="statusOptions"
-            label="Статус"
+        <v-card-text class="px-4 pb-0">
+          <p class="mb-4 text-body-2 text-grey-darken-1">
+            Кому: <strong style="color: #1A1A2E;">{{ selectedOrgForReminder?.name }}</strong>
+          </p>
+          <v-textarea
+            v-model="reminderMessage"
+            label="Текст уведомления"
             variant="outlined"
-            clearable
-            class="mb-4"
-          ></v-select>
-          <v-checkbox v-model="filterSMP" label="Только СМП" hide-details color="#5C6BC0"></v-checkbox>
-          <v-checkbox v-model="filterWithEmail" label="Только с email" hide-details color="#5C6BC0"></v-checkbox>
+            auto-grow
+            rows="4"
+            color="#1B3A5C"
+          ></v-textarea>
         </v-card-text>
-        <v-card-actions>
-          <v-btn variant="text" @click="resetAdvancedFilters">Сбросить</v-btn>
+        <v-card-actions class="px-4 pb-4">
           <v-spacer></v-spacer>
-          <v-btn color="#5C6BC0" variant="flat" @click="showAdvancedFilters = false">Применить</v-btn>
+          <v-btn variant="text" color="grey-darken-1" @click="reminderDialog = false" :disabled="isSendingReminder">Отмена</v-btn>
+          <v-btn color="#1B3A5C" variant="flat" :loading="isSendingReminder" @click="confirmSendReminder">Отправить</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="3000">
-      {{ snackbar.text }}
+    <v-snackbar v-model="snackbar" :color="snackbarColor" timeout="3000">
+      {{ snackbarText }}
     </v-snackbar>
-  </v-container>
+  </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
-import api from '@/services/api';
+import { ref, computed, onMounted } from 'vue'
+// ИМПОРТ НОВОГО API notificationsAPI
+import { monitoringAPI, dictionariesAPI, organizationsAPI, notificationsAPI } from '@/services/api'
 
-const selectedYear = ref(2022);
-const selectedPeriod = ref('q1');
-const selectedDistrict = ref(null);
-const showAdvancedFilters = ref(false);
-const filterStatus = ref(null);
-const filterSMP = ref(false);
-const filterWithEmail = ref(false);
-const exporting = ref(false);
-const loading = ref(false);
-const organizations = ref([]);
-const itemsPerPage = ref(15);
-const currentPage = ref(1);
+const selectedYear = ref(2025)
+const selectedQuarter = ref(1)
+const selectedDistricts = ref([])
+const loading = ref(false)
+const search = ref('')
+const districts = ref([])
 
-const availableYears = [2025, 2024, 2023, 2022];
+const snackbar = ref(false)
+const snackbarText = ref('')
+const snackbarColor = ref('success')
 
-const periods = [
-  { title: '1 квартал (январь-март)', value: 'q1' },
-  { title: '2 квартал (апрель-июнь)', value: 'q2' },
-  { title: '3 квартал (июль-сентябрь)', value: 'q3' },
-  { title: '4 квартал (октябрь-декабрь)', value: 'q4' },
-  { title: 'Годовой отчёт', value: 'annual' }
-];
+const quarterOptions = [
+  { title: '1 кв (январь–март)', value: 1 },
+  { title: '2 кв (январь–июнь)', value: 2 },
+  { title: '3 кв (январь–сентябрь)', value: 3 },
+  { title: '4 кв (январь–декабрь)', value: 4 },
+]
 
-// Русская локализация для пагинации
-const itemsPerPageOptions = [
-  { value: 10, title: '10' },
-  { value: 15, title: '15' },
-  { value: 25, title: '25' },
-  { value: 50, title: '50' },
-  { value: -1, title: 'Все' }
-];
-
-const periodTitle = computed(() => {
-  const p = periods.find(x => x.value === selectedPeriod.value);
-  return p ? p.title : '';
-});
-
-const districts = [
-  'г. Тюмень', 'Тюменский район', 'г. Ишим', 'Ишимский район',
-  'г. Тобольск', 'Тобольский район', 'г. Ялуторовск', 'Ялуторовский район',
-  'г. Заводоуковск', 'Голышмановский район', 'Исетский район', 'Уватский район'
-];
-
-const statusOptions = [
-  { title: 'Сдан', value: 'submitted' },
-  { title: 'Не запланировано', value: 'not_planned' },
-  { title: 'Просрочено', value: 'overdue' }
-];
+const statusData = ref({ total: 0, submitted: 0, overdue: 0, not_planned: 0, percent: 0, items: [] })
 
 const headers = [
+  { title: '№', key: 'index', width: '50px', sortable: false },
   { title: 'Организация', key: 'name', width: '35%' },
-  { title: 'ИНН', key: 'inn', width: '12%' },
-  { title: 'Район', key: 'district', width: '18%' },
-  { title: 'Email', key: 'email', width: '20%' },
-  { title: 'Статус', key: 'status', width: '10%' },
-  { title: 'Действия', key: 'actions', width: '5%', sortable: false }
-];
+  { title: 'ИНН', key: 'inn', width: '120px' },
+  { title: 'Район', key: 'district' },
+  { title: 'СМП', key: 'is_smp', width: '60px', align: 'center' },
+  { title: 'Статус', key: 'status', width: '140px' },
+  { title: '', key: 'actions', width: '80px', sortable: false },
+]
 
-const snackbar = ref({ show: false, text: '', color: 'success' });
+const filteredItems = computed(() => {
+  return (statusData.value.items || []).map((item, i) => ({
+    ...item,
+    index: i + 1
+  }))
+})
 
-const summary = computed(() => {
-  const total = organizations.value.length || 274;
-  const submitted = organizations.value.filter(o => o.status === 'submitted').length || 157;
-  const overdue = organizations.value.filter(o => o.status === 'overdue').length || 0;
-  const percent = total > 0 ? Math.round((submitted / total) * 100) : 57;
-  return { total, submitted, overdue, percent };
-});
+function statusColor(s) {
+  return { submitted: '#2E7D32', overdue: '#D32F2F', not_planned: '#9E9E9E' }[s] || '#9E9E9E'
+}
+function statusText(s) {
+  return { submitted: 'Сдан', overdue: 'Просрочен', not_planned: 'Не запл.' }[s] || s
+}
 
-const filteredOrganizations = computed(() => {
-  let result = [...organizations.value];
-  if (selectedDistrict.value) {
-    result = result.filter(o => o.district === selectedDistrict.value);
-  }
-  if (filterStatus.value) {
-    result = result.filter(o => o.status === filterStatus.value);
-  }
-  if (filterSMP.value) {
-    result = result.filter(o => o.is_smp);
-  }
-  if (filterWithEmail.value) {
-    result = result.filter(o => o.email);
-  }
-  return result;
-});
-
-const totalPages = computed(() => {
-  return Math.ceil(filteredOrganizations.value.length / itemsPerPage.value);
-});
-
-const paginationText = computed(() => {
-  const total = filteredOrganizations.value.length;
-  const start = (currentPage.value - 1) * itemsPerPage.value + 1;
-  const end = Math.min(currentPage.value * itemsPerPage.value, total);
-  return `${start}-${end} из ${total}`;
-});
-
-const getStatusColor = (status) => {
-  const map = { submitted: '#26A69A', not_planned: '#78909C', overdue: '#FF8A65' };
-  return map[status] || '#78909C';
-};
-
-const getStatusText = (status) => {
-  const map = { submitted: 'Сдан', not_planned: 'Не запланировано', overdue: 'Просрочено' };
-  return map[status] || status;
-};
-
-const resetAdvancedFilters = () => {
-  filterStatus.value = null;
-  filterSMP.value = false;
-  filterWithEmail.value = false;
-};
-
-const downloadReport = async () => {
-  exporting.value = true;
+async function loadDistricts() {
   try {
-    const response = await api.get('/reports/export/monitoring', {
-      params: { year: selectedYear.value, period: selectedPeriod.value },
-      responseType: 'blob'
-    });
-    const url = window.URL.createObjectURL(new Blob([response.data]));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `monitoring_${selectedPeriod.value}_${selectedYear.value}.xlsx`;
-    a.click();
-    snackbar.value = { show: true, text: 'Отчёт успешно выгружен', color: 'success' };
-  } catch (e) {
-    snackbar.value = { show: true, text: 'Ошибка выгрузки', color: 'error' };
-  } finally {
-    exporting.value = false;
-  }
-};
+    const { data } = await dictionariesAPI.getDistricts()
+    districts.value = data
+  } catch { /* ignore */ }
+}
 
-const downloadOrgReport = async (org) => {
+async function loadStatus() {
+  loading.value = true
   try {
-    const response = await api.get(`/reports/export/organization/${org.id}`, {
-      params: { year: selectedYear.value, quarter: selectedPeriod.value },
-      responseType: 'blob'
-    });
-    const url = window.URL.createObjectURL(new Blob([response.data]));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `report_${org.inn}_${selectedPeriod.value}_${selectedYear.value}.xlsx`;
-    a.click();
-  } catch (e) {
-    snackbar.value = { show: true, text: 'Ошибка выгрузки', color: 'error' };
-  }
-};
-
-const fetchData = async () => {
-  loading.value = true;
-  try {
-    const res = await api.get('/monitoring/status', {
-      params: { year: selectedYear.value, period: selectedPeriod.value }
-    });
-    if (res.data?.items) {
-      organizations.value = res.data.items.map(o => ({
-        id: o.id,
-        name: o.name,
-        inn: o.inn,
-        district: o.district?.name || o.municipality || '',
-        email: o.contact_email || o.email || '',
-        status: o.status || 'not_planned',
-        is_smp: o.is_smp || false
-      }));
+    const params = { year: selectedYear.value, quarter: selectedQuarter.value }
+    if (selectedDistricts.value.length) {
+      params.districts = selectedDistricts.value.join(',')
     }
+    const { data } = await monitoringAPI.getStatus(params)
+    statusData.value = data
   } catch (e) {
-    console.error('Error fetching monitoring data:', e);
+    console.error(e)
   } finally {
-    loading.value = false;
-  }
-};
-
-watch([selectedYear, selectedPeriod], fetchData);
-onMounted(fetchData);
-
-const fileInputs = ref({})
-const uploadingId = ref(null)
-
-const triggerFileInput = (orgId) => {
-  if (fileInputs.value[orgId]) {
-    fileInputs.value[orgId].click()
+    loading.value = false
   }
 }
 
-const handleFileUpload = async (event, orgId) => {
-  const file = event.target.files[0]
-  if (!file) return
+// --- ЛОГИКА ОТПРАВКИ УВЕДОМЛЕНИЙ ---
+const reminderDialog = ref(false)
+const selectedOrgForReminder = ref(null)
+const reminderMessage = ref('')
+const isSendingReminder = ref(false)
 
-  uploadingId.value = orgId
-  const formData = new FormData()
-  formData.append('file', file)
+function sendReminder(item) {
+  selectedOrgForReminder.value = item
+  const quarterText = quarterOptions.find(q => q.value === selectedQuarter.value)?.title || ''
+  reminderMessage.value = `Уважаемый руководитель! Напоминаем о необходимости срочно сдать отчетность формы П-2 за ${quarterText} ${selectedYear.value} года.`
+  reminderDialog.value = true
+}
 
+async function confirmSendReminder() {
+  if (!selectedOrgForReminder.value || !reminderMessage.value) return
+  isSendingReminder.value = true
+  
   try {
-    let uploadUrl = `/monitoring/upload/${orgId}?year=${selectedYear.value}`
-    if (selectedQuarter.value) {
-      uploadUrl += `&quarter=${selectedQuarter.value}`
-    }
-
-    // api уже настроен с withCredentials: true
-    await api.post(uploadUrl, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+    // ВЫЗЫВАЕМ НАШ НОВЫЙ БЭКЕНД
+    await notificationsAPI.send({
+      organization_id: selectedOrgForReminder.value.id,
+      message: reminderMessage.value
     })
-    
-    snackbarText.value = 'Отчет успешно загружен!'
+    snackbarText.value = 'Уведомление успешно отправлено'
     snackbarColor.value = 'success'
     snackbar.value = true
-    await loadStatus() // Обновляем таблицу
-  } catch (error) {
-    snackbarText.value = error.response?.data?.detail || 'Ошибка загрузки файла'
+    reminderDialog.value = false
+  } catch (e) {
+    snackbarText.value = 'Ошибка отправки уведомления'
     snackbarColor.value = 'error'
     snackbar.value = true
   } finally {
-    uploadingId.value = null
-    event.target.value = ''
+    isSendingReminder.value = false
   }
 }
+
+async function sendAllReminders() {
+  try {
+    const { data } = await monitoringAPI.sendReminders(selectedYear.value, selectedQuarter.value)
+    snackbarText.value = data.message
+    snackbarColor.value = 'success'
+    snackbar.value = true
+  } catch {
+    snackbarText.value = 'Ошибка при массовой рассылке'
+    snackbarColor.value = 'error'
+    snackbar.value = true
+  }
+}
+
+async function exportData() {
+  try {
+    const { data } = await organizationsAPI.exportExcel({
+      year: selectedYear.value,
+      districts: selectedDistricts.value.join(',')
+    })
+    const url = URL.createObjectURL(data)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `monitoring_${selectedYear.value}_Q${selectedQuarter.value}.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    console.error(e)
+  }
+}
+
+onMounted(() => {
+  loadDistricts()
+  loadStatus()
+})
 </script>
+
+<style scoped>
+.monitoring-table :deep(.v-data-table__tr:hover) {
+  background: #F8F9FB !important;
+}
+.gap-2 { gap: 8px; }
+</style>

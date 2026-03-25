@@ -1,169 +1,136 @@
 <template>
-  <div>
-    <h1 class="text-h4 font-weight-bold mb-6">Импорт данных</h1>
-
+  <div class="upload-page">
     <v-row>
-      <!-- Загрузка файла -->
-      <v-col cols="12" md="6">
-        <v-card class="pa-6" border style="border-style: dashed !important; border-width: 2px !important; border-color: #1976D2 !important;">
-          <div class="text-center">
-            <v-icon icon="mdi-cloud-upload" size="64" color="primary" class="mb-4"></v-icon>
-            <div class="text-h6 mb-2">Перетащите файл Excel (П-2) сюда</div>
-            <div class="text-caption text-grey mb-6">Поддерживаются .xlsx, .xls</div>
+      <v-col cols="12" md="7">
+        <v-card class="stat-card pa-6">
+          <div class="section-title">Загрузка файла Excel (форма П-2)</div>
 
-            <!-- Выбор типа отчёта -->
-            <v-select
-              v-model="reportType"
-              :items="reportTypes"
-              item-title="title"
-              item-value="value"
-              label="Тип отчёта"
-              variant="outlined"
-              density="comfortable"
-              class="mb-4 mx-auto"
-              style="max-width: 300px;"
-            ></v-select>
-
-            <!-- Выбор года -->
-            <v-text-field
-              v-model="selectedYear"
-              label="Год"
-              variant="outlined"
-              density="comfortable"
-              type="number"
-              class="mb-4 mx-auto"
-              style="max-width: 300px;"
-            ></v-text-field>
-
-            <v-file-input
-              v-model="file"
-              label="Выберите файл на компьютере"
-              variant="outlined"
-              prepend-icon=""
-              prepend-inner-icon="mdi-file-excel"
-              density="compact"
-              class="mx-auto"
-              style="max-width: 300px;"
-              accept=".xlsx,.xls"
-              show-size
-            ></v-file-input>
-
-            <v-btn
-              color="primary"
-              class="mt-4"
-              size="large"
-              @click="uploadFile"
-              :loading="uploading"
-              :disabled="!file || !reportType"
-            >
-              <v-icon start>mdi-upload</v-icon>
-              Загрузить и обработать
-            </v-btn>
+          <div
+            class="upload-dropzone"
+            :class="{ 'upload-dropzone--active': isDragging }"
+            @dragover.prevent="isDragging = true"
+            @dragleave="isDragging = false"
+            @drop.prevent="handleDrop"
+          >
+            <v-icon size="56" :color="isDragging ? '#2E7D32' : '#BDBDBD'">
+              mdi-cloud-upload-outline
+            </v-icon>
+            <p class="mt-3 text-body-1 font-weight-medium">
+              Перетащите файл сюда
+            </p>
+            <p class="text-caption text-grey">или нажмите кнопку ниже</p>
           </div>
+
+          <v-row class="mt-4" dense>
+            <v-col cols="12" sm="4">
+              <v-select
+                v-model="reportType"
+                :items="reportTypes"
+                item-title="title"
+                item-value="value"
+                label="Тип отчёта"
+                variant="outlined"
+                density="compact"
+                hide-details
+                color="#1B3A5C"
+              />
+            </v-col>
+            <v-col cols="12" sm="4">
+              <v-text-field
+                v-model.number="selectedYear"
+                label="Год"
+                variant="outlined"
+                density="compact"
+                type="number"
+                hide-details
+                color="#1B3A5C"
+              />
+            </v-col>
+            <v-col cols="12" sm="4">
+              <v-file-input
+                v-model="file"
+                label="Выберите файл"
+                variant="outlined"
+                density="compact"
+                accept=".xlsx,.xls"
+                prepend-icon=""
+                prepend-inner-icon="mdi-file-excel"
+                show-size
+                hide-details
+                color="#1B3A5C"
+              />
+            </v-col>
+          </v-row>
+
+          <v-btn
+            color="#2E7D32"
+            block
+            class="mt-4 text-white"
+            size="large"
+            @click="uploadFile"
+            :loading="uploading"
+            :disabled="!file || !reportType"
+          >
+            <v-icon start>mdi-upload</v-icon>
+            Загрузить и обработать
+          </v-btn>
+
+          <v-alert
+            v-if="result"
+            :type="result.status === 'success' ? 'success' : 'error'"
+            variant="tonal"
+            class="mt-4"
+            closable
+            @click:close="result = null"
+          >
+            <template v-if="result.status === 'success'">
+              Файл успешно обработан. Загружено записей: <strong>{{ result.records || 0 }}</strong>
+            </template>
+            <template v-else>
+              Ошибка обработки: {{ result.detail }}
+            </template>
+          </v-alert>
         </v-card>
       </v-col>
 
-      <!-- Шаблоны для скачивания -->
-      <v-col cols="12" md="6">
-        <v-card elevation="2" class="mb-4">
-          <v-card-title>Шаблоны отчётов</v-card-title>
-          <v-card-subtitle>Скачайте шаблон для заполнения</v-card-subtitle>
-          <v-list lines="two">
+      <v-col cols="12" md="5">
+        <v-card class="stat-card pa-5 mb-4">
+          <div class="section-title">Шаблоны для заполнения</div>
+          <v-list density="compact">
             <v-list-item
-              v-for="template in reportTemplates"
-              :key="template.type"
-              @click="downloadTemplate(template.type)"
-              class="cursor-pointer"
-            >
-              <template v-slot:prepend>
-                <v-icon color="green">mdi-file-excel</v-icon>
-              </template>
-              <v-list-item-title>{{ template.title }}</v-list-item-title>
-              <v-list-item-subtitle>{{ template.description }}</v-list-item-subtitle>
-              <template v-slot:append>
-                <v-btn icon size="small" color="primary" variant="text">
-                  <v-icon>mdi-download</v-icon>
-                </v-btn>
-              </template>
-            </v-list-item>
+              v-for="t in templates"
+              :key="t.type"
+              @click="downloadTemplate(t.type)"
+              prepend-icon="mdi-file-download-outline"
+              :title="t.title"
+              :subtitle="t.desc"
+              class="rounded-lg mb-1"
+            />
           </v-list>
         </v-card>
 
-        <!-- История загрузок -->
-        <v-card elevation="2">
-          <v-card-title>История загрузок</v-card-title>
-          <v-list lines="two">
+        <v-card class="stat-card pa-5">
+          <div class="section-title">Экспорт данных (База)</div>
+          <v-list density="compact">
             <v-list-item
-              v-for="(upload, index) in uploadHistory"
-              :key="index"
-            >
-              <template v-slot:prepend>
-                <v-icon :color="upload.status === 'success' ? 'green' : 'red'">
-                  {{ upload.status === 'success' ? 'mdi-check-circle' : 'mdi-alert-circle' }}
-                </v-icon>
-              </template>
-              <v-list-item-title>{{ upload.filename }}</v-list-item-title>
-              <v-list-item-subtitle>
-                {{ upload.type }} • {{ upload.date }}
-                <span v-if="upload.records" class="text-green"> • {{ upload.records }} записей</span>
-              </v-list-item-subtitle>
-            </v-list-item>
-            <v-list-item v-if="uploadHistory.length === 0">
-              <v-list-item-title class="text-grey text-center">
-                Нет загруженных файлов
-              </v-list-item-title>
-            </v-list-item>
+              prepend-icon="mdi-calendar-range"
+              title="Динамика 2022–2025"
+              subtitle="ФАКТ / ПЛАН по годам"
+              @click="exportYearly"
+              class="rounded-lg mb-1"
+            />
+            <v-list-item
+              prepend-icon="mdi-map-marker-multiple"
+              title="По районам"
+              subtitle="Все районы за выбранный год"
+              @click="exportDistricts"
+              class="rounded-lg mb-1"
+            />
           </v-list>
         </v-card>
       </v-col>
     </v-row>
 
-    <!-- Прогресс загрузки -->
-    <v-dialog v-model="progressDialog" persistent max-width="400">
-      <v-card>
-        <v-card-title>Обработка файла</v-card-title>
-        <v-card-text>
-          <v-progress-linear
-            :model-value="uploadProgress"
-            color="primary"
-            height="20"
-            striped
-          >
-            <strong>{{ uploadProgress }}%</strong>
-          </v-progress-linear>
-          <p class="text-center mt-4 text-grey">{{ progressMessage }}</p>
-        </v-card-text>
-      </v-card>
-    </v-dialog>
-
-    <!-- Результат загрузки -->
-    <v-dialog v-model="resultDialog" max-width="500">
-      <v-card>
-        <v-card-title :class="uploadResult.success ? 'text-green' : 'text-red'">
-          {{ uploadResult.success ? 'Успешно загружено!' : 'Ошибка загрузки' }}
-        </v-card-title>
-        <v-card-text>
-          <v-alert
-            :type="uploadResult.success ? 'success' : 'error'"
-            variant="tonal"
-            class="mb-4"
-          >
-            {{ uploadResult.message }}
-          </v-alert>
-          <div v-if="uploadResult.success">
-            <p><strong>Обработано записей:</strong> {{ uploadResult.records }}</p>
-            <p><strong>Новых организаций:</strong> {{ uploadResult.newOrgs }}</p>
-            <p><strong>Обновлено:</strong> {{ uploadResult.updated }}</p>
-          </div>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer></v-spacer>
-          <v-btn color="primary" @click="resultDialog = false">Закрыть</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <!-- Snackbar -->
     <v-snackbar v-model="snackbar" :color="snackbarColor" timeout="3000">
       {{ snackbarText }}
     </v-snackbar>
@@ -171,155 +138,105 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
-import axios from 'axios';
+import { ref } from 'vue'
+import { reportsAPI } from '@/services/api'
 
-// Состояние
-const file = ref(null);
-const reportType = ref(null);
-const selectedYear = ref(new Date().getFullYear());
-const uploading = ref(false);
-const progressDialog = ref(false);
-const resultDialog = ref(false);
-const uploadProgress = ref(0);
-const progressMessage = ref('');
-const snackbar = ref(false);
-const snackbarText = ref('');
-const snackbarColor = ref('success');
+const file = ref(null)
+const reportType = ref('annual')
+const selectedYear = ref(new Date().getFullYear())
+const uploading = ref(false)
+const isDragging = ref(false)
+const result = ref(null)
 
-const uploadResult = ref({
-  success: false,
-  message: '',
-  records: 0,
-  newOrgs: 0,
-  updated: 0
-});
-
-const uploadHistory = ref([]);
+const snackbar = ref(false)
+const snackbarText = ref('')
+const snackbarColor = ref('success')
 
 const reportTypes = [
-  { title: '1 квартал (январь-март)', value: 'q1' },
-  { title: '2 квартал (апрель-июнь)', value: 'q2' },
-  { title: '3 квартал (июль-сентябрь)', value: 'q3' },
-  { title: '4 квартал (октябрь-декабрь)', value: 'q4' },
-  { title: 'Годовой отчёт', value: 'annual' }
-];
+  { title: 'Годовой отчёт', value: 'annual' },
+  { title: 'Квартальный П-2', value: 'quarterly' },
+]
 
-const reportTemplates = [
-  { type: 'q1', title: 'Шаблон 1 квартал', description: 'Форма П-2 (квартальная) январь-март' },
-  { type: 'q2', title: 'Шаблон 2 квартал', description: 'Форма П-2 (квартальная) апрель-июнь' },
-  { type: 'q3', title: 'Шаблон 3 квартал', description: 'Форма П-2 (квартальная) июль-сентябрь' },
-  { type: 'q4', title: 'Шаблон 4 квартал', description: 'Форма П-2 (квартальная) октябрь-декабрь' },
-  { type: 'annual', title: 'Шаблон годовой', description: 'Форма П-2 (инвест) годовая' }
-];
+const templates = [
+  { type: 'annual', title: 'Шаблон годового отчёта', desc: 'Excel с колонками П-2' },
+  { type: 'quarterly', title: 'Шаблон квартального', desc: 'Для квартальной сдачи' },
+]
 
-const uploadFile = async () => {
-  if (!file.value || !reportType.value) return;
+function handleDrop(e) {
+  isDragging.value = false
+  const dropped = e.dataTransfer.files[0]
+  if (dropped) file.value = dropped
+}
 
-  uploading.value = true;
-  progressDialog.value = true;
-  uploadProgress.value = 0;
-  progressMessage.value = 'Загрузка файла...';
-
-  const formData = new FormData();
-  const fileToUpload = Array.isArray(file.value) ? file.value[0] : file.value;
-  formData.append('file', fileToUpload);
-  formData.append('report_type', reportType.value);
-  formData.append('year', selectedYear.value);
-
+async function uploadFile() {
+  if (!file.value) return
+  uploading.value = true
+  result.value = null
   try {
-    // Симуляция прогресса
-    const progressInterval = setInterval(() => {
-      if (uploadProgress.value < 90) {
-        uploadProgress.value += 10;
-        if (uploadProgress.value === 30) progressMessage.value = 'Чтение файла...';
-        if (uploadProgress.value === 60) progressMessage.value = 'Обработка данных...';
-        if (uploadProgress.value === 80) progressMessage.value = 'Сохранение в базу...';
-      }
-    }, 300);
-
-    const response = await axios.post('/api/v1/reports/upload', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    });
-
-    clearInterval(progressInterval);
-    uploadProgress.value = 100;
-    progressMessage.value = 'Готово!';
-
-    uploadResult.value = {
-      success: true,
-      message: response.data.detail || 'Файл успешно обработан',
-      records: response.data.records || 0,
-      newOrgs: response.data.new_organizations || 0,
-      updated: response.data.updated || 0
-    };
-
-    // Добавляем в историю
-    const reportTypeName = reportTypes.find(r => r.value === reportType.value)?.title || reportType.value;
-    uploadHistory.value.unshift({
-      filename: fileToUpload.name,
-      type: `${reportTypeName} ${selectedYear.value}`,
-      date: new Date().toLocaleString('ru-RU'),
-      status: 'success',
-      records: uploadResult.value.records
-    });
-
-    file.value = null;
-    showSnackbar('Файл успешно загружен!', 'success');
-
-  } catch (error) {
-    uploadResult.value = {
-      success: false,
-      message: error.response?.data?.detail || 'Ошибка при загрузке файла',
-      records: 0,
-      newOrgs: 0,
-      updated: 0
-    };
-
-    const fileToUpload = Array.isArray(file.value) ? file.value[0] : file.value;
-    uploadHistory.value.unshift({
-      filename: fileToUpload?.name || 'Файл',
-      type: reportType.value,
-      date: new Date().toLocaleString('ru-RU'),
-      status: 'error'
-    });
-
-    showSnackbar('Ошибка загрузки: ' + (error.response?.data?.detail || error.message), 'error');
+    const { data } = await reportsAPI.upload(file.value, reportType.value, selectedYear.value)
+    result.value = { status: 'success', records: data.records_processed || data.records || 0 }
+    file.value = null
+  } catch (e) {
+    result.value = { status: 'error', detail: e.response?.data?.detail || 'Произошла системная ошибка при парсинге файла' }
   } finally {
-    uploading.value = false;
-    progressDialog.value = false;
-    resultDialog.value = true;
+    uploading.value = false
   }
-};
+}
 
-const downloadTemplate = (type) => {
-  const url = `/api/v1/reports/template/${type}`;
-  window.open(url, '_blank');
-  showSnackbar(`Скачивание шаблона`, 'info');
-};
+async function downloadTemplate(type) {
+  try {
+    const { data } = await reportsAPI.downloadTemplate(type)
+    downloadBlob(data, `template_${type}.xlsx`)
+  } catch (e) {
+    showError('Ошибка скачивания шаблона')
+  }
+}
 
-const showSnackbar = (text, color) => {
-  snackbarText.value = text;
-  snackbarColor.value = color;
-  snackbar.value = true;
-};
+async function exportYearly() {
+  try {
+    const { data } = await reportsAPI.exportYearly()
+    downloadBlob(data, 'yearly_2022-2025.xlsx')
+  } catch (e) {
+    showError('Ошибка экспорта данных')
+  }
+}
 
-onMounted(() => {
-  // Загружаем историю
-  uploadHistory.value = [
-    { filename: 'Отчет_2024_Q3.xlsx', type: '3 квартал 2024', date: 'Сегодня, 14:30', status: 'success', records: 274 },
-    { filename: 'Отчет_2024_Q2.xlsx', type: '2 квартал 2024', date: '15.08.2024', status: 'success', records: 268 }
-  ];
-});
+async function exportDistricts() {
+  try {
+    const { data } = await reportsAPI.exportDistricts(selectedYear.value)
+    downloadBlob(data, `districts_${selectedYear.value}.xlsx`)
+  } catch (e) {
+    showError('Ошибка экспорта данных')
+  }
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function showError(msg) {
+  snackbarText.value = msg
+  snackbarColor.value = 'error'
+  snackbar.value = true
+}
 </script>
 
 <style scoped>
-.cursor-pointer {
+.upload-dropzone {
+  border: 2px dashed #D0D5DD;
+  border-radius: 12px;
+  padding: 48px;
+  text-align: center;
+  transition: all 0.2s;
   cursor: pointer;
 }
-.cursor-pointer:hover {
-  background-color: rgba(0, 0, 0, 0.04);
+.upload-dropzone--active {
+  border-color: #2E7D32;
+  background: rgba(46, 125, 50, 0.04);
 }
 </style>

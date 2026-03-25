@@ -8,15 +8,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import async_session_factory
 from app.models.organization import Organization
-from app.models.directories import Okved
+from app.models.directories import Okved, District
 from app.models.investment_fact import InvestmentFact
 from app.models.investment_forecast import InvestmentForecast
 from app.models.report_submission import ReportSubmission
+from app.models.user import User
+from app.models.user_credential import UserCredential
+from app.core.security import hash_password as get_password_hash
+from app.core.config import settings
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-REPORTS_DIR = "/app/data/reports"
+# ИЗМЕНЕНО: Теперь папка берется из uploads
+REPORTS_DIR = "/app/uploads"
 
 def calculate_deadline(year: int, quarter: int | None) -> date:
     if quarter == 1: return date(year, 4, 20)
@@ -40,16 +45,33 @@ def clean_inn(inn_val) -> str | None:
     return cleaned if cleaned.isdigit() else None
 
 def safe_parse_float(val) -> float:
-    """Безопасный парсинг грязных чисел из Excel (пробелы, запятые)"""
-    if val is None:
-        return 0.0
-    if isinstance(val, (int, float)):
-        return float(val)
+    if val is None: return 0.0
+    if isinstance(val, (int, float)): return float(val)
     try:
         cleaned = str(val).replace(" ", "").replace("\xa0", "").replace(",", ".")
         return float(cleaned)
     except ValueError:
         return 0.0
+
+async def seed_districts(session: AsyncSession):
+    districts_list = [
+        "Абатский район", "Армизонский район", "Аромашевский район", 
+        "Бердюжский район", "Вагайский район", "Викуловский район", 
+        "Голышмановский район", "Заводоуковский район", "г. Заводоуковск",
+        "Исетский район", "г. Ишим", "Ишимский район", 
+        "Казанский район", "Нижнетавдинский район", "Омутинский район", 
+        "Сладковский район", "Сорокинский район", "г. Тобольск",
+        "Тобольский район", "Тюменский район", "г. Тюмень",
+        "Уватский район", "Упоровский район", "Юргинский район", 
+        "Ялуторовский район", "г. Ялуторовск", "Ярковский район"
+    ]
+    logger.info("🗺 Инициализация справочника районов...")
+    for dist_name in districts_list:
+        stmt = select(District).where(District.name == dist_name)
+        existing = (await session.execute(stmt)).scalar_one_or_none()
+        if not existing:
+            session.add(District(name=dist_name))
+    await session.commit()
 
 async def process_file(file_path: str, year: int, quarter: int | None, db: AsyncSession) -> bool:
     try:
@@ -72,14 +94,27 @@ async def process_file(file_path: str, year: int, quarter: int | None, db: Async
         if not row_data["inn"]:
             return False
 
-        # Изолируем транзакцию для конкретного файла
         async with db.begin_nested():
+            # 1. Организация
             org = (await db.execute(select(Organization).where(Organization.inn == row_data["inn"]))).scalar_one_or_none()
             if not org:
-                org = Organization(name=str(row_data["name"])[:512], inn=row_data["inn"])
+                org = Organization(name=str(row_data["name"])[:512], inn=row_data["inn"], is_smp=row_data["is_smp"])
                 db.add(org)
                 await db.flush()
 
+            # 2. Создаем учетную запись для организации (чтобы можно было зайти)
+            org_email = f"info_{row_data['inn']}@obr72.ru"
+            user = (await db.execute(select(User).where(User.email == org_email))).scalar_one_or_none()
+            if not user:
+                new_user = User(
+                    email=org_email, role="organization", organization_id=org.id,
+                    is_active=True, is_email_verified=True # Сразу верифицирован
+                )
+                db.add(new_user)
+                await db.flush()
+                db.add(UserCredential(user_id=new_user.id, hashed_password=get_password_hash(row_data["inn"])))
+
+            # 3. ОКВЭД
             if row_data["okved_code"]:
                 okved_obj = (await db.execute(select(Okved).where(Okved.code == row_data["okved_code"]))).scalar_one_or_none()
                 if not okved_obj:
@@ -89,6 +124,7 @@ async def process_file(file_path: str, year: int, quarter: int | None, db: Async
                 if not org.okved_id:
                     org.okved_id = okved_obj.id
 
+            # 4. Факты инвестиций
             report_type = 'p2_quarterly' if quarter else 'p2_annual'
             fact = (await db.execute(
                 select(InvestmentFact).where(
@@ -109,6 +145,7 @@ async def process_file(file_path: str, year: int, quarter: int | None, db: Async
                     no_investment_reason=row_data["reason"]
                 ))
 
+            # 5. Прогнозы (План)
             if row_data["forecast"] > 0:
                 existing_forecasts = (await db.execute(
                     select(InvestmentForecast)
@@ -121,21 +158,8 @@ async def process_file(file_path: str, year: int, quarter: int | None, db: Async
                         organization_id=org.id, year=year,
                         forecast_amount=row_data["forecast"], forecast_type='initial'
                     ))
-                else:
-                    last_forecast = existing_forecasts[0]
-                    if last_forecast.forecast_amount != row_data["forecast"]:
-                        rev_date = row_data["submit_date"] or date.today()
-                        same_date_forecast = next((f for f in existing_forecasts if f.forecast_type == 'revised' and f.revision_date == rev_date), None)
-                        
-                        if same_date_forecast:
-                            same_date_forecast.forecast_amount = row_data["forecast"]
-                        else:
-                            db.add(InvestmentForecast(
-                                organization_id=org.id, year=year,
-                                forecast_amount=row_data["forecast"], forecast_type='revised',
-                                revision_date=rev_date
-                            ))
 
+            # 6. Статус сдачи отчета
             sub_quarter = quarter if quarter else 4
             subm = (await db.execute(
                 select(ReportSubmission).where(
@@ -173,13 +197,28 @@ async def process_file(file_path: str, year: int, quarter: int | None, db: Async
         return False
 
 async def run_import():
+    logger.info("🌱 Инициализация БД и парсинг файлов...")
+    
     if not os.path.exists(REPORTS_DIR):
         logger.error(f"❌ Папка {REPORTS_DIR} не найдена!")
         return
 
     async with async_session_factory() as db:
+        # 1. Создаем Админа
+        res = await db.execute(select(User).where(User.email == settings.FIRST_SUPERUSER))
+        if not res.scalar_one_or_none():
+            admin = User(email=settings.FIRST_SUPERUSER, role="admin", is_active=True, is_email_verified=True)
+            db.add(admin)
+            await db.flush()
+            db.add(UserCredential(user_id=admin.id, hashed_password=get_password_hash(settings.FIRST_SUPERUSER_PASSWORD)))
+            await db.commit()
+            logger.info("✅ Главный администратор создан")
+
+        # 2. Заполняем справочник районов
+        await seed_districts(db)
+
+        # 3. Парсинг Excel
         processed_total = 0
-        
         for year_folder in sorted(os.listdir(REPORTS_DIR)):
             year_path = os.path.join(REPORTS_DIR, year_folder)
             if not os.path.isdir(year_path) or not year_folder.isdigit():
@@ -211,7 +250,7 @@ async def run_import():
                     if success:
                         processed_total += 1
                     
-                    if processed_total % 100 == 0:
+                    if processed_total % 50 == 0:
                         await db.commit()
                         logger.info(f"    ⏳ Закоммичено {processed_total} файлов...")
 

@@ -40,11 +40,17 @@ services:
   backend:
     build: ./backend
     container_name: investment_backend
-    command: sh -c "alembic revision --autogenerate -m 'auto_migration' || true && alembic upgrade head && python -m app.utils.seed_data && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     ports:
       - "8000:8000"
+    volumes:
+      - ./backend:/app
     env_file:
       - .env
+    environment:
+      - DB_HOST=postgres
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/investment_db
+      - REDIS_URL=redis://redis:6379/0
     depends_on:
       postgres:
         condition: service_healthy
@@ -52,7 +58,6 @@ services:
         condition: service_healthy
     networks:
       - investment_network
-
   frontend:
     build: ./frontend
     container_name: investment_frontend

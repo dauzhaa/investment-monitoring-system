@@ -1,3 +1,4 @@
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -9,6 +10,7 @@ from app.core.config import settings
 from app.api.endpoints import auth, reports
 from app.api.routers import organizations
 from app.api.routers import monitoring
+from app.api.routers import audit, notifications
 
 
 logging.basicConfig(
@@ -97,6 +99,8 @@ app.include_router(
     tags=["6. Dictionaries"]
 )
 
+app.include_router(audit.router)
+app.include_router(notifications.router)
 
 @app.get("/")
 async def root():
