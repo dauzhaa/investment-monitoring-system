@@ -1,86 +1,76 @@
 <template>
   <v-container>
-    <v-btn
-      prepend-icon="mdi-arrow-left"
-      variant="text"
-      @click="$router.push('/dashboard')"
-      class="mb-4"
-    >
-      Назад к дашборду
+    <v-btn prepend-icon="mdi-arrow-left" variant="text" @click="$router.push('/')" class="mb-4">
+      Назад к главной
     </v-btn>
 
     <v-card class="mb-4">
-      <v-card-title class="text-h4">
-        {{ districtData.district?.name }}
+      <v-card-title class="text-h4 font-weight-bold" style="color: #1B3A5C;">
+        {{ districtData.district?.name || 'Загрузка...' }}
       </v-card-title>
-      <v-card-subtitle>
-        Организаций: {{ districtData.district?.organizations_count }}
+      <v-card-subtitle class="text-subtitle-1">
+        Зарегистрировано организаций: {{ districtData.district?.organizations_count || 0 }}
       </v-card-subtitle>
     </v-card>
 
-    <!-- Статистика -->
     <v-row>
       <v-col cols="12" md="4">
-        <v-card color="primary" dark class="pa-4 rounded-lg">
-          <div class="text-subtitle-1">Прогноз</div>
+        <v-card color="#F57C00" dark class="pa-4 rounded-lg text-white">
+          <div class="text-subtitle-1 font-weight-medium">План</div>
           <div class="text-h4 font-weight-bold">
-            {{ formatNumber(districtData.stats?.forecast) }} млн ₽
+            {{ formatNumber(districtData.stats?.forecast) }} <span class="text-h6">тыс. ₽</span>
           </div>
         </v-card>
       </v-col>
       
       <v-col cols="12" md="4">
-        <v-card color="success" dark class="pa-4 rounded-lg">
-          <div class="text-subtitle-1">Факт</div>
+        <v-card color="#2E7D32" dark class="pa-4 rounded-lg text-white">
+          <div class="text-subtitle-1 font-weight-medium">Факт</div>
           <div class="text-h4 font-weight-bold">
-            {{ formatNumber(districtData.stats?.fact) }} млн ₽
+            {{ formatNumber(districtData.stats?.fact) }} <span class="text-h6">тыс. ₽</span>
           </div>
         </v-card>
       </v-col>
       
       <v-col cols="12" md="4">
-        <v-card color="info" dark class="pa-4 rounded-lg">
-          <div class="text-subtitle-1">Освоение</div>
+        <v-card color="#1B3A5C" dark class="pa-4 rounded-lg text-white">
+          <div class="text-subtitle-1 font-weight-medium">Освоение бюджета</div>
           <div class="text-h4 font-weight-bold">
-            {{ districtData.stats?.execution_percent }}%
+            {{ districtData.stats?.execution_percent || 0 }}%
           </div>
         </v-card>
       </v-col>
     </v-row>
 
-    <!-- График истории -->
     <v-row class="mt-4">
       <v-col cols="12">
-        <v-card class="rounded-lg">
-          <v-card-title>История инвестиций</v-card-title>
-          <v-card-text style="height: 400px;">
+        <v-card class="rounded-lg pa-4">
+          <div class="text-h6 font-weight-bold mb-2" style="color: #1B3A5C;">История инвестиций</div>
+          <v-card-text style="height: 400px; padding: 0;">
             <v-chart class="chart" :option="historyChartOption" autoresize />
           </v-card-text>
         </v-card>
       </v-col>
     </v-row>
 
-    <!-- Таблица организаций -->
     <v-row class="mt-4">
       <v-col cols="12">
         <v-card>
-          <v-card-title>Организации района</v-card-title>
+          <v-card-title class="font-weight-bold" style="color: #1B3A5C;">Организации района</v-card-title>
           <v-data-table
             :headers="orgHeaders"
             :items="districtData.organizations"
             :items-per-page="10"
+            hover
           >
             <template v-slot:item.forecast="{ item }">
               {{ formatNumber(item.forecast) }}
             </template>
             <template v-slot:item.fact="{ item }">
-              {{ formatNumber(item.fact) }}
+              <span class="font-weight-bold" style="color: #2E7D32;">{{ formatNumber(item.fact) }}</span>
             </template>
             <template v-slot:item.execution="{ item }">
-              <v-chip 
-                :color="getExecutionColor(item)"
-                size="small"
-              >
+              <v-chip :color="getExecutionColor(item)" size="small" variant="flat" class="font-weight-bold">
                 {{ calculateExecution(item) }}%
               </v-chip>
             </template>
@@ -92,7 +82,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import VChart from 'vue-echarts';
 import { use } from 'echarts/core';
@@ -117,13 +107,13 @@ const historyChartOption = ref({});
 const orgHeaders = [
   { title: 'Организация', key: 'name', align: 'start' },
   { title: 'ИНН', key: 'inn' },
-  { title: 'Прогноз (млн ₽)', key: 'forecast', align: 'end' },
-  { title: 'Факт (млн ₽)', key: 'fact', align: 'end' },
+  { title: 'План (тыс. ₽)', key: 'forecast', align: 'end' },
+  { title: 'Факт (тыс. ₽)', key: 'fact', align: 'end' },
   { title: 'Освоение', key: 'execution', align: 'center' }
 ];
 
 const formatNumber = (num) => {
-  return num ? num.toLocaleString('ru-RU') : 0;
+  return num ? new Intl.NumberFormat('ru-RU').format(Math.round(num)) : '0';
 };
 
 const calculateExecution = (item) => {
@@ -133,18 +123,17 @@ const calculateExecution = (item) => {
 
 const getExecutionColor = (item) => {
   const execution = calculateExecution(item);
-  if (execution >= 80) return 'success';
-  if (execution >= 50) return 'warning';
-  return 'error';
+  if (execution >= 80) return '#2E7D32';
+  if (execution >= 50) return '#F57C00';
+  return '#D32F2F';
 };
 
 onMounted(async () => {
   try {
     const districtName = route.params.name;
-    const response = await axios.get(`/api/v1/districts/${districtName}`);
+    const response = await axios.get(`/api/v1/districts/${encodeURIComponent(districtName)}`);
     districtData.value = response.data;
 
-    // Формируем график истории
     const years = districtData.value.history.map(h => h.year.toString());
     const amounts = districtData.value.history.map(h => h.amount);
 
@@ -152,27 +141,20 @@ onMounted(async () => {
       tooltip: {
         trigger: 'axis',
         formatter: (params) => {
-          return `${params[0].name}<br/>Инвестиции: ${formatNumber(params[0].value)} млн ₽`;
+          return `${params[0].name}<br/><span style="color:#2E7D32;font-weight:bold;">Факт:</span> ${formatNumber(params[0].value)} тыс. ₽`;
         }
       },
-      xAxis: {
-        type: 'category',
-        data: years
-      },
-      yAxis: {
-        type: 'value',
-        axisLabel: {
-          formatter: '{value} млн ₽'
-        }
-      },
+      grid: { left: '2%', right: '4%', bottom: '5%', top: '10%', containLabel: true },
+      xAxis: { type: 'category', boundaryGap: false, data: years },
+      yAxis: { type: 'value', axisLabel: { formatter: (value) => formatNumber(value) } },
       series: [
         {
           name: 'Инвестиции',
           type: 'line',
           data: amounts,
           smooth: true,
-          itemStyle: { color: '#1976D2' },
-          areaStyle: { opacity: 0.3 }
+          itemStyle: { color: '#2E7D32' },
+          areaStyle: { color: 'rgba(46, 125, 50, 0.2)' }
         }
       ]
     };
@@ -183,8 +165,5 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.chart {
-  height: 100%;
-  width: 100%;
-}
+.chart { height: 100%; width: 100%; }
 </style>

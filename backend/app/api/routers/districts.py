@@ -12,13 +12,34 @@ router = APIRouter()
 
 @router.get("/{district_name}")
 async def get_district_details(district_name: str, db: AsyncSession = Depends(get_db)):
-    district = (await db.execute(select(District).where(District.name == district_name))).scalar_one_or_none()
+    search_term = district_name.lower().replace("район", "").replace("г.", "").strip()
+    
+    district = (await db.execute(
+        select(District).where(func.lower(District.name).like(f"%{search_term}%"))
+    )).scalar_one_or_none()
+    
     if not district:
         raise HTTPException(status_code=404, detail="Район не найден")
     
     orgs = (await db.execute(select(Organization).where(Organization.district_id == district.id))).scalars().all()
     org_ids = [org.id for org in orgs]
-    current_year = date.today().year
+    
+    if not org_ids:
+        return {
+            "district": {"name": district.name, "organizations_count": 0},
+            "stats": {"forecast": 0.0, "fact": 0.0, "execution_percent": 0.0},
+            "history": [],
+            "organizations": []
+        }
+        
+    # ИЗМЕНЕНО: Динамический поиск последнего года с данными
+    latest_year_res = await db.execute(
+        select(func.max(InvestmentFact.year))
+        .where(InvestmentFact.organization_id.in_(org_ids))
+    )
+    current_year = latest_year_res.scalar()
+    if not current_year:
+        current_year = date.today().year
     
     # План
     plan_subq = select(InvestmentForecast.organization_id, func.max(InvestmentForecast.id).label("mid")).where(
@@ -31,7 +52,7 @@ async def get_district_details(district_name: str, db: AsyncSession = Depends(ge
     )
     plans = dict(plan_res.all())
     
-    # Факт (текущий год)
+    # Факт (за вычисленный current_year)
     fact_res = await db.execute(
         select(InvestmentFact.organization_id, func.max(InvestmentFact.amount))
         .where(InvestmentFact.organization_id.in_(org_ids), InvestmentFact.year == current_year)

@@ -86,7 +86,7 @@ app.include_router(
     tags=["5. Monitoring"]
 )
 
-# 6. Districts Router (новый)
+# 6. Districts & Dictionaries
 app.include_router(
     districts.router,
     prefix="/api/v1/districts",
@@ -99,8 +99,8 @@ app.include_router(
     tags=["6. Dictionaries"]
 )
 
-app.include_router(audit.router)
-app.include_router(notifications.router)
+app.include_router(audit.router, prefix="/api/v1")
+app.include_router(notifications.router, prefix="/api/v1")
 
 @app.get("/")
 async def root():

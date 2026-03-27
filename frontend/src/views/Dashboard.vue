@@ -1,118 +1,63 @@
 <template>
   <div class="dashboard">
     <div class="d-flex align-center mb-6" style="gap: 16px;">
-      <v-select
-        v-model="startYear"
-        :items="availableYears"
-        label="С года"
-        variant="outlined"
-        density="compact"
-        hide-details
-        color="#1B3A5C"
-        style="max-width: 140px;"
-      />
+      <v-select v-model="startYear" :items="availableYears" label="С года" variant="outlined" density="compact" hide-details color="primary" style="max-width: 140px;" />
       <span class="text-grey-darken-1">—</span>
-      <v-select
-        v-model="endYear"
-        :items="availableYears"
-        label="По год"
-        variant="outlined"
-        density="compact"
-        hide-details
-        color="#1B3A5C"
-        style="max-width: 140px;"
-      />
+      <v-select v-model="endYear" :items="availableYears" label="По год" variant="outlined" density="compact" hide-details color="primary" style="max-width: 140px;" />
       <v-spacer />
-      <v-btn
-        variant="tonal"
-        color="#1B3A5C"
-        size="small"
-        prepend-icon="mdi-refresh"
-        :loading="loading"
-        @click="loadData"
-      >
+      <v-btn variant="flat" color="primary" size="small" prepend-icon="mdi-refresh" :loading="loading" @click="loadData">
         Обновить данные
       </v-btn>
     </div>
 
     <v-row class="mb-4">
-      <v-col cols="12" sm="6" lg="3">
-        <v-card class="stat-card pa-5">
-          <div class="d-flex align-center justify-space-between mb-2">
-            <div class="kpi-icon kpi-icon--primary">
-              <v-icon size="22" color="#1B3A5C">mdi-cash-multiple</v-icon>
+      <v-col cols="12" lg="6">
+        <v-card class="stat-card hero-card pa-6 text-white" style="background: linear-gradient(135deg, #1B3A5C 0%, #0F2439 100%);">
+          <div class="d-flex justify-space-between align-start h-100">
+            <div>
+              <div class="text-subtitle-1 font-weight-medium text-white-50 mb-1">Фактические инвестиции</div>
+              <div class="text-h3 font-weight-bold mb-2">{{ formatMoney(animFact) }} <span class="text-h6 font-weight-regular">тыс. ₽</span></div>
+              <v-chip size="small" color="success" variant="flat" class="font-weight-bold">
+                <v-icon start size="14">mdi-trending-up</v-icon> {{ stats.executionPercent }}% освоение
+              </v-chip>
             </div>
-          </div>
-          <div class="kpi-value" style="color: #1B3A5C">
-            {{ formatMoney(stats.factTotal) }}
-          </div>
-          <div class="kpi-label">Инвестиции ФАКТ (тыс. ₽)</div>
-          <div class="kpi-change" :style="{ color: executionColor }">
-            <v-icon size="14">{{ stats.executionPercent >= 80 ? 'mdi-trending-up' : 'mdi-trending-down' }}</v-icon>
-            {{ stats.executionPercent }}% от плана
+            <v-icon size="64" color="rgba(255,255,255,0.1)">mdi-cash-multiple</v-icon>
           </div>
         </v-card>
       </v-col>
 
-      <v-col cols="12" sm="6" lg="3">
-        <v-card class="stat-card pa-5">
-          <div class="d-flex align-center justify-space-between mb-2">
-            <div class="kpi-icon kpi-icon--warning">
-              <v-icon size="22" color="#F57C00">mdi-target</v-icon>
-            </div>
-          </div>
-          <div class="kpi-value" style="color: #F57C00">
-            {{ formatMoney(stats.planTotal) }}
-          </div>
-          <div class="kpi-label">Инвестиции ПЛАН (тыс. ₽)</div>
+      <v-col cols="12" sm="4" lg="2">
+        <v-card class="stat-card pa-4 h-100 d-flex flex-column justify-center">
+          <div class="text-caption text-grey-darken-1 font-weight-medium mb-1">ПЛАН (тыс. ₽)</div>
+          <div class="text-h5 font-weight-bold text-warning mb-2">{{ formatMoney(animPlan) }}</div>
+          <v-progress-linear :model-value="stats.executionPercent" color="warning" height="4" rounded />
         </v-card>
       </v-col>
 
-      <v-col cols="12" sm="6" lg="3">
-        <v-card class="stat-card pa-5">
-          <div class="d-flex align-center justify-space-between mb-2">
-            <div class="kpi-icon kpi-icon--success">
-              <v-icon size="22" color="#2E7D32">mdi-domain</v-icon>
-            </div>
-          </div>
-          <div class="kpi-value" style="color: #2E7D32">
-            {{ stats.orgsWithInvestments }}
-          </div>
-          <div class="kpi-label">Организаций с инвестициями</div>
-          <div class="kpi-change" style="color: var(--text-secondary)">
-            из {{ stats.orgsWithInvestments + stats.orgsWithoutInvestments }} всего
-          </div>
+      <v-col cols="12" sm="4" lg="2">
+        <v-card class="stat-card pa-4 h-100 d-flex flex-column justify-center">
+          <div class="text-caption text-grey-darken-1 font-weight-medium mb-1">ОРГАНИЗАЦИЙ</div>
+          <div class="text-h5 font-weight-bold text-primary mb-2">{{ animTotalOrgs }}</div>
+          <div class="text-caption text-success">С инвестициями: {{ animOrgsWithInvestments }}</div>
         </v-card>
       </v-col>
 
-      <v-col cols="12" sm="6" lg="3">
-        <v-card class="stat-card pa-5">
-          <div class="d-flex align-center justify-space-between mb-2">
-            <div class="kpi-icon" :class="executionIconClass">
-              <v-icon size="22" :color="executionColor">mdi-percent-outline</v-icon>
-            </div>
+      <v-col cols="12" sm="4" lg="2">
+        <v-card class="stat-card pa-4 h-100 d-flex flex-column justify-center">
+          <div class="text-caption text-grey-darken-1 font-weight-medium mb-1">ОСВОЕНИЕ БЮДЖЕТА</div>
+          <div class="text-h5 font-weight-bold" :class="stats.executionPercent >= 80 ? 'text-success' : 'text-error'">
+            {{ animExec }}%
           </div>
-          <div class="kpi-value" :style="{ color: executionColor }">
-            {{ stats.executionPercent }}%
-          </div>
-          <div class="kpi-label">Освоение бюджета</div>
-          <v-progress-linear
-            :model-value="stats.executionPercent"
-            :color="executionColor"
-            height="6"
-            rounded
-            class="mt-3"
-          />
         </v-card>
       </v-col>
     </v-row>
 
     <v-row class="mb-4">
       <v-col cols="12">
-        <v-card class="stat-card pa-5" style="height: 500px">
-          <div class="section-title">Инвестиционная карта районов (Факт)</div>
-          <v-chart v-if="mapData.length" class="chart" :option="mapOption" autoresize @click="handleMapClick" />
-          <div v-else class="map-placeholder">Загрузка карты...</div>
+        <v-card class="stat-card pa-5" style="height: 550px">
+          <div class="text-subtitle-1 font-weight-bold mb-4" style="color: #1B3A5C">Инвестиционная карта районов</div>
+          <MapChart v-if="mapData.length" :data="mapData" @district-click="handleMapClick" />
+          <div v-else class="d-flex align-center justify-center h-100 text-grey">Загрузка карты...</div>
         </v-card>
       </v-col>
     </v-row>
@@ -120,44 +65,24 @@
     <v-row>
       <v-col cols="12" lg="5">
         <v-card class="stat-card pa-5" style="height: 420px">
-          <div class="section-title">Динамика освоения (Факт / План)</div>
-          <v-chart v-if="trends.history?.length" class="chart" :option="historyOption" autoresize />
+          <div class="text-subtitle-1 font-weight-bold mb-2" style="color: #1B3A5C">Объем инвестиций по годам</div>
+          <v-chart v-if="trends.history?.length" class="chart" :option="areaOption" autoresize />
           <div v-else class="text-center text-grey pa-10 mt-10">Нет данных</div>
         </v-card>
       </v-col>
 
       <v-col cols="12" lg="3">
         <v-card class="stat-card pa-5" style="height: 420px">
-          <div class="section-title">По кварталам (Факт)</div>
-          <v-chart v-if="quarters.length" class="chart" :option="quartersOption" autoresize />
+          <div class="text-subtitle-1 font-weight-bold mb-2" style="color: #1B3A5C">Квартальное распределение</div>
+          <v-chart v-if="quarters.length" class="chart" :option="quarterGroupOption" autoresize />
           <div v-else class="text-center text-grey pa-10 mt-10">Нет данных</div>
         </v-card>
       </v-col>
 
       <v-col cols="12" lg="4">
-        <v-card class="stat-card pa-5" style="height: 420px; overflow-y: auto;">
-          <div class="section-title">Топ-5 районов</div>
-          <div v-if="trends.rating && trends.rating.length">
-            <div
-              v-for="(d, i) in trends.rating.slice(0, 5)"
-              :key="d.name"
-              class="top-district"
-              @click="$router.push(`/districts/${encodeURIComponent(d.name)}`)"
-            >
-              <div class="top-district-rank" :style="{ background: i===0 ? 'rgba(27, 58, 92, 0.1)' : '#F0F2F5', color: i===0 ? '#1B3A5C' : '#757575' }">#{{ i + 1 }}</div>
-              <div class="top-district-info">
-                <div class="top-district-name">{{ d.name }}</div>
-                <v-progress-linear
-                  :model-value="(d.value / maxDistrictValue) * 100"
-                  color="#1B3A5C"
-                  height="6"
-                  rounded
-                  bg-color="#E5E7EB"
-                />
-              </div>
-              <div class="top-district-value">{{ formatMoneyShort(d.value) }}</div>
-            </div>
-          </div>
+        <v-card class="stat-card pa-5" style="height: 420px">
+          <div class="text-subtitle-1 font-weight-bold mb-2" style="color: #1B3A5C">Топ-5 районов</div>
+          <v-chart v-if="trends.rating?.length" class="chart" :option="topDistrictsOption" autoresize />
           <div v-else class="text-center text-grey pa-10">Нет данных</div>
         </v-card>
       </v-col>
@@ -169,20 +94,15 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { analyticsAPI } from '@/services/api'
+import MapChart from '@/components/MapChart.vue'
 
-// ECharts импорты
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { BarChart, MapChart, PieChart } from 'echarts/charts'
-import { GridComponent, TooltipComponent, LegendComponent, VisualMapComponent, GeoComponent } from 'echarts/components'
+import { BarChart, LineChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
 import VChart from 'vue-echarts'
-import * as echarts from 'echarts/core'
 
-// Тюменская карта
-import tyumenMap from '@/assets/tyumen_districts.json'
-
-use([CanvasRenderer, BarChart, MapChart, PieChart, GridComponent, TooltipComponent, LegendComponent, VisualMapComponent, GeoComponent])
-echarts.registerMap('tyumen', tyumenMap)
+use([CanvasRenderer, BarChart, LineChart, GridComponent, TooltipComponent, LegendComponent])
 
 const router = useRouter()
 const availableYears = [2022, 2023, 2024, 2025]
@@ -190,143 +110,113 @@ const startYear = ref(2022)
 const endYear = ref(2025)
 const loading = ref(false)
 
-const stats = ref({
-  factTotal: 0, planTotal: 0, executionPercent: 0,
-  orgsWithInvestments: 0, orgsWithoutInvestments: 0
-})
+const stats = ref({ factTotal: 0, planTotal: 0, executionPercent: 0, orgsWithInvestments: 0, orgsWithoutInvestments: 0 })
 const quarters = ref([])
 const trends = ref({ history: [], rating: [] })
 const mapData = ref([])
 
-// --- Форматирование и Стили ---
-const executionColor = computed(() => {
-  const p = stats.value.executionPercent
-  if (p >= 80) return '#2E7D32' // success
-  if (p >= 50) return '#F57C00' // warning
-  return '#D32F2F' // danger
-})
+// Анимации чисел (State)
+const animFact = ref(0);
+const animPlan = ref(0);
+const animTotalOrgs = ref(0);
+const animOrgsWithInvestments = ref(0);
+const animExec = ref(0);
 
-const executionIconClass = computed(() => {
-  const p = stats.value.executionPercent
-  if (p >= 80) return 'kpi-icon--success'
-  if (p >= 50) return 'kpi-icon--warning'
-  return 'kpi-icon--danger'
-})
+const animateValue = (refVar, target, duration = 800) => {
+  let startTimestamp = null;
+  const initial = refVar.value;
+  const step = (timestamp) => {
+    if (!startTimestamp) startTimestamp = timestamp;
+    const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+    refVar.value = Math.floor(progress * (target - initial) + initial);
+    if (progress < 1) window.requestAnimationFrame(step);
+  };
+  window.requestAnimationFrame(step);
+}
 
-const maxDistrictValue = computed(() => {
-  if (!trends.value.rating?.length) return 1
-  return Math.max(...trends.value.rating.map(d => d.value))
-})
+watch(() => stats.value, (newStats) => {
+  animateValue(animFact, newStats.factTotal);
+  animateValue(animPlan, newStats.planTotal);
+  animateValue(animTotalOrgs, newStats.orgsWithInvestments + newStats.orgsWithoutInvestments);
+  animateValue(animOrgsWithInvestments, newStats.orgsWithInvestments);
+  animateValue(animExec, newStats.executionPercent);
+}, { deep: true });
 
 function formatMoney(val) {
   if (!val) return '0'
-  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(val)
+  return new Intl.NumberFormat('ru-RU').format(Math.round(val))
 }
 
-function formatMoneyShort(val) {
-  if (!val) return '0'
-  if (val >= 1000000) return (val / 1000000).toFixed(1) + 'M'
-  if (val >= 1000) return (val / 1000).toFixed(0) + 'K'
-  return val
-}
-
-// --- ECharts Конфигурации ---
-
-// 1. Карта на весь экран
-const mapOption = computed(() => {
-  const data = mapData.value.map(d => ({ name: d.district, value: d.fact || d.value || 0 }))
-  const maxVal = Math.max(...data.map(d => d.value), 1)
-
-  return {
-    tooltip: { trigger: 'item', formatter: '{b}<br/>Факт: {c} тыс. ₽' },
-    visualMap: {
-      left: 'right',
-      min: 0,
-      max: maxVal,
-      inRange: { color: ['#E5E7EB', '#1B3A5C'] }, // Твоя палитра
-      text: ['Макс', 'Мин'],
-      calculable: true
-    },
-    series: [{
-      name: 'Тюменская область',
-      type: 'map',
-      map: 'tyumen',
-      roam: true,
-      itemStyle: { borderColor: '#fff', borderWidth: 0.5 },
-      emphasis: { itemStyle: { areaColor: '#F57C00' }, label: { show: true, color: '#fff' } },
-      data: data
-    }]
-  }
-})
-
-// 2. Stacked / Overlay график (План как фон, Факт внутри)
-const historyOption = computed(() => {
+// 1. Area Chart (Динамика)
+const areaOption = computed(() => {
   const xData = trends.value.history?.map(d => d.year) || []
-  const factData = trends.value.history?.map(d => d.amount) || []
-  const planData = trends.value.history?.map(d => d.forecast) || []
-
   return {
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    legend: { data: ['ПЛАН', 'ФАКТ'], bottom: 0, icon: 'roundRect' },
-    grid: { left: '3%', right: '4%', bottom: '15%', top: '10%', containLabel: true },
-    xAxis: { type: 'category', data: xData },
-    yAxis: { type: 'value', axisLabel: { formatter: v => formatMoneyShort(v) } },
+    tooltip: { trigger: 'axis', valueFormatter: (value) => formatMoney(value) + ' тыс. ₽' },
+    legend: { data: ['Факт', 'План'], top: 0, left: 'center' }, // ИЗМЕНЕНО: Легенда сверху
+    grid: { left: '2%', right: '4%', bottom: '5%', top: '15%', containLabel: true }, // ИЗМЕНЕНО: top: 15% дает место
+    xAxis: { type: 'category', boundaryGap: false, data: xData },
+    yAxis: { type: 'value', axisLabel: { formatter: v => formatMoney(v) } },
     series: [
-      { 
-        name: 'ПЛАН', 
-        type: 'bar', 
-        barGap: '-100%', // Наложение друг на друга
-        barWidth: '40%', // План шире
-        itemStyle: { color: 'rgba(245, 124, 0, 0.2)', borderRadius: [4,4,0,0], borderColor: '#F57C00', borderWidth: 1 }, 
-        data: planData 
+      {
+        name: 'Факт', type: 'line', smooth: true,
+        itemStyle: { color: '#2E7D32' },
+        areaStyle: { color: 'rgba(46, 125, 50, 0.2)' },
+        data: trends.value.history?.map(d => d.amount) || []
       },
-      { 
-        name: 'ФАКТ', 
-        type: 'bar', 
-        barWidth: '20%', // Факт уже и внутри плана
-        itemStyle: { color: '#2E7D32', borderRadius: [4,4,0,0] }, 
-        data: factData 
+      {
+        name: 'План', type: 'line', smooth: true,
+        itemStyle: { color: '#F57C00' },
+        lineStyle: { type: 'dashed', width: 2 },
+        data: trends.value.history?.map(d => d.forecast) || []
       }
     ]
   }
 })
 
-// 3. Кварталы (Pie chart для разнообразия данных)
-const quartersOption = computed(() => {
-  const data = quarters.value.map(q => ({ name: `${q.quarter} кв`, value: q.fact }))
+// 2. Grouped Bar (Кварталы)
+const quarterGroupOption = computed(() => {
+  const xData = quarters.value.map(q => `${q.quarter} кв`)
   return {
-    tooltip: { trigger: 'item', formatter: '{b}: {c} тыс. ₽ ({d}%)' },
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, valueFormatter: (value) => formatMoney(value) + ' тыс. ₽' },
+    legend: { data: ['Факт', 'План'], top: 0, left: 'center', itemWidth: 10, itemHeight: 10 }, // ИЗМЕНЕНО: Легенда сверху
+    grid: { left: '2%', right: '2%', bottom: '5%', top: '15%', containLabel: true }, // ИЗМЕНЕНО: top: 15% дает место
+    xAxis: { type: 'category', data: xData },
+    yAxis: { type: 'value', splitLine: { show: false }, axisLabel: { show: false } },
+    series: [
+      { name: 'Факт', type: 'bar', data: quarters.value.map(q => q.fact), itemStyle: { color: '#1B3A5C', borderRadius: [4,4,0,0] } },
+      { name: 'План', type: 'bar', data: quarters.value.map(q => q.plan || q.fact * 1.2), itemStyle: { color: '#E0E0E0', borderRadius: [4,4,0,0] } }
+    ]
+  }
+})
+
+const topDistrictsOption = computed(() => {
+  const top5 = [...(trends.value.rating || [])].sort((a,b) => a.value - b.value).slice(-5);
+  return {
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, valueFormatter: (value) => formatMoney(value) + ' тыс. ₽' },
+    grid: { left: '2%', right: '15%', bottom: '2%', top: '5%', containLabel: true },
+    xAxis: { type: 'value', show: false },
+    yAxis: { type: 'category', data: top5.map(d => d.name), axisLine: {show: false}, axisTick: {show: false} },
     series: [{
-      type: 'pie',
-      radius: ['40%', '70%'],
-      avoidLabelOverlap: false,
-      itemStyle: { borderRadius: 4, borderColor: '#fff', borderWidth: 2 },
-      label: { show: false },
-      color: ['#1B3A5C', '#2E7D32', '#F57C00', '#D32F2F'],
-      data: data
+      type: 'bar',
+      data: top5.map(d => d.value),
+      itemStyle: { color: '#2E7D32', borderRadius: [0,4,4,0] },
+      label: { show: true, position: 'right', formatter: (p) => formatMoney(p.value), color: '#1B3A5C', fontWeight: 'bold' }
     }]
   }
 })
 
-// --- Экшены ---
-const handleMapClick = (params) => {
-  if (params.name) router.push(`/districts/${encodeURIComponent(params.name)}`)
+const handleMapClick = (name) => {
+  // Навигация теперь внутри MapChart.vue
 }
 
 async function loadData() {
-  if (startYear.value > endYear.value) {
-    const temp = startYear.value
-    startYear.value = endYear.value
-    endYear.value = temp
-  }
-
   loading.value = true
   try {
     const [dashRes, quartersRes, trendsRes, mapRes] = await Promise.allSettled([
-      analyticsAPI.getDashboard(startYear.value, endYear.value), // Бэк должен уметь принимать 2 года, если нет - передавай startYear
-      analyticsAPI.getQuarters(startYear.value, endYear.value),
-      analyticsAPI.getTrends(startYear.value, endYear.value),
-      analyticsAPI.getMapData(startYear.value, endYear.value),
+      analyticsAPI.getDashboard({ start_year: startYear.value, end_year: endYear.value }),
+      analyticsAPI.getQuarters({ start_year: startYear.value, end_year: endYear.value }),
+      analyticsAPI.getTrends({ start_year: startYear.value, end_year: endYear.value }),
+      analyticsAPI.getMapData({ start_year: startYear.value, end_year: endYear.value }),
     ])
     if (dashRes.status === 'fulfilled') stats.value = dashRes.value.data
     if (quartersRes.status === 'fulfilled') quarters.value = quartersRes.value.data
@@ -344,56 +234,6 @@ onMounted(loadData)
 </script>
 
 <style scoped>
-.chart {
-  height: 100%;
-  width: 100%;
-}
-.kpi-icon {
-  width: 42px;
-  height: 42px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.kpi-icon--primary { background: rgba(27, 58, 92, 0.1); }
-.kpi-icon--success { background: rgba(46, 125, 50, 0.1); }
-.kpi-icon--warning { background: rgba(245, 124, 0, 0.1); }
-.kpi-icon--danger  { background: rgba(211, 47, 47, 0.1); }
-
-.map-placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: var(--text-secondary);
-  background: #F8F9FB;
-  border-radius: 8px;
-  border: 1px dashed #E0E0E0;
-}
-
-.top-district {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 8px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.top-district:hover { background: #F5F7FA; }
-.top-district-rank {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  font-weight: 700;
-  flex-shrink: 0;
-}
-.top-district-info { flex: 1; min-width: 0; }
-.top-district-name { font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
-.top-district-value { font-size: 13px; font-weight: 700; color: #1B3A5C; }
+.chart { height: 100%; width: 100%; }
+.hero-card { overflow: hidden; position: relative; }
 </style>
