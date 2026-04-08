@@ -20,29 +20,13 @@ import logging
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-@router.post("/register", response_model=UserSchema)
-async def register_user(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
-    db_user = await get_user_by_email(db, email=user_in.email)
-    if db_user:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="email уже зарегистрирован")
-    
-    new_user = await create_user(db, user_in=user_in)
-    return new_user
-        
-@router.post("/login")
-async def login(
-    request: Request,
-    response: Response, 
-    form_data: OAuth2PasswordRequestForm = Depends(), 
-    db: AsyncSession = Depends(get_db)
-):
-    user = await authenticate_user(db, email=form_data.username, password=form_data.password)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Неправильный логин или пароль"
-        )
-        
+# ==================== УТИЛИТЫ ====================
+
+def generate_numeric_code(length: int = 6) -> str:
+    return ''.join(random.choices(string.digits, k=length))
+
+async def _create_user_session(user: DBUser, request: Request, response: Response, db: AsyncSession):
+    """Вспомогательная функция для создания сессии и установки Cookie"""
     session_token = generate_session_token()
     ip_address = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent", None)
@@ -67,11 +51,100 @@ async def login(
         httponly=True,
         samesite="lax",
         max_age=30 * 24 * 60 * 60,
-        secure=False, 
+        secure=False, # В будущем для HTTPS в проде лучше ставить True
         path="/" 
     )
     
-    return {"message": "Успешный вход", "role": user.role}
+    return {"message": "Успешный вход", "role": user.role, "is_email_verified": user.is_email_verified}
+
+# ==================== СХЕМЫ ЗАПРОСОВ ====================
+
+class VerifyCodeRequest(BaseModel):
+    code: str
+
+class Login2FARequest(BaseModel):
+    email: str
+    password: str
+    code: str
+
+# ==================== РОУТЕРЫ ====================
+
+@router.post("/register", response_model=UserSchema)
+async def register_user(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
+    db_user = await get_user_by_email(db, email=user_in.email)
+    if db_user:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="email уже зарегистрирован")
+    
+    new_user = await create_user(db, user_in=user_in)
+    return new_user
+        
+@router.post("/login")
+async def login(
+    request: Request,
+    response: Response, 
+    form_data: OAuth2PasswordRequestForm = Depends(), 
+    db: AsyncSession = Depends(get_db)
+):
+    user = await authenticate_user(db, email=form_data.username, password=form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Неправильный логин или пароль"
+        )
+    
+    # 1. Если почта еще не подтверждена -> пускаем без 2FA (для доступа к профилю и верификации)
+    if not user.is_email_verified:
+        return await _create_user_session(user, request, response, db)
+    
+    # 2. Если почта подтверждена -> запускаем процесс 2FA (отправляем код)
+    await db.execute(delete(EmailVerificationCode).where(EmailVerificationCode.user_id == user.id))
+    
+    code = generate_numeric_code()
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=15) # Код для входа живет 15 минут
+    
+    new_code = EmailVerificationCode(user_id=user.id, code=code, expires_at=expires_at)
+    db.add(new_code)
+    await db.commit()
+    
+    # Mock отправки email с кодом 2FA
+    logger.info("\n" + "🛡 "*25)
+    logger.info(f"🔑 2FA LOGIN MOCK: Код для входа {user.email} -> {code}")
+    logger.info("🛡 "*25 + "\n")
+    
+    # Возвращаем статус 202, сообщая фронтенду, что требуется ввод кода
+    return Response(
+        status_code=status.HTTP_202_ACCEPTED, 
+        content='{"require_2fa": true, "message": "Код отправлен на почту"}', 
+        media_type="application/json"
+    )
+
+@router.post("/login/verify-2fa")
+async def login_verify_2fa(
+    payload: Login2FARequest,
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db)
+):
+    # Повторная проверка пароля для безопасности
+    user = await authenticate_user(db, email=payload.email, password=payload.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Ошибка аутентификации")
+
+    # Проверка введенного кода
+    stmt = select(EmailVerificationCode).where(
+        EmailVerificationCode.user_id == user.id,
+        EmailVerificationCode.code == payload.code
+    )
+    db_code = (await db.execute(stmt)).scalar_one_or_none()
+
+    if not db_code or db_code.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Неверный код или срок его действия истек")
+
+    # Код верен, удаляем его и создаем сессию
+    await db.execute(delete(EmailVerificationCode).where(EmailVerificationCode.user_id == user.id))
+    await db.commit()
+    
+    return await _create_user_session(user, request, response, db)
 
 @router.post("/logout")
 async def logout(
@@ -91,10 +164,7 @@ async def logout(
 async def get_current_user_profile(current_user: DBUser = Depends(get_current_user)):
     return current_user
 
-# ==================== ВЕРИФИКАЦИЯ EMAIL ====================
-
-def generate_numeric_code(length: int = 6) -> str:
-    return ''.join(random.choices(string.digits, k=length))
+# ==================== ВЕРИФИКАЦИЯ EMAIL (ПРОФИЛЬ) ====================
 
 @router.post("/request-verification")
 async def request_email_verification(
@@ -123,9 +193,6 @@ async def request_email_verification(
     logger.info("="*50 + "\n")
     
     return {"message": "Код подтверждения отправлен на почту"}
-
-class VerifyCodeRequest(BaseModel):
-    code: str
 
 @router.post("/verify-email")
 async def verify_email_code(
