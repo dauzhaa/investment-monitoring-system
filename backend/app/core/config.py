@@ -49,11 +49,11 @@ class Settings(BaseSettings):
     UPLOAD_PATH: str = "./uploads"
     
     # Email
-    SMTP_HOST: str = "smtp.gmail.com"
-    SMTP_PORT: int = 587
-    SMTP_USER: Optional[str] = None
-    SMTP_PASSWORD: Optional[str] = None
-    EMAIL_FROM: str = "noreply@investment-monitoring.ru"
+    SMTP_HOST: str | None = None
+    SMTP_PORT: int = 465
+    SMTP_USER: str | None = None
+    SMTP_PASSWORD: str | None = None
+    SMTP_USE_TLS: bool = True   
     
     # --- ДОБАВЛЕННЫЕ ПОЛЯ ДЛЯ АДМИНА ---
     FIRST_SUPERUSER: str = "admin@example.com"

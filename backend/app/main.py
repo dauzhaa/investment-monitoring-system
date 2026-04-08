@@ -11,6 +11,7 @@ from app.api.endpoints import auth, reports
 from app.api.routers import organizations
 from app.api.routers import monitoring
 from app.api.routers import audit, notifications
+from app.api.endpoints import export
 
 
 logging.basicConfig(
@@ -103,6 +104,7 @@ app.include_router(
 
 app.include_router(audit.router, prefix="/api/v1")
 app.include_router(notifications.router, prefix="/api/v1")
+app.include_router(export.router, prefix="/api/v1")
 
 @app.get("/")
 async def root():

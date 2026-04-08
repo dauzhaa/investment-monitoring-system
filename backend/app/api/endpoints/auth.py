@@ -15,6 +15,10 @@ from app.models.user_session import UserSession
 from app.models.email_verification_code import EmailVerificationCode
 from app.core.security import generate_session_token
 from app.api.dependencies import get_current_user
+
+# ИМПОРТИРУЕМ НАШ БОЕВОЙ СЕРВИС ОТПРАВКИ
+from app.services.notification_service import send_real_email
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -106,10 +110,10 @@ async def login(
     db.add(new_code)
     await db.commit()
     
-    # Mock отправки email с кодом 2FA
-    logger.info("\n" + "🛡 "*25)
-    logger.info(f"🔑 2FA LOGIN MOCK: Код для входа {user.email} -> {code}")
-    logger.info("🛡 "*25 + "\n")
+    # ОТПРАВЛЯЕМ РЕАЛЬНОЕ ПИСЬМО
+    subject = "Код для входа в ИнвестМонитор72"
+    body = f"Здравствуйте!\n\nВаш проверочный код для входа в систему: {code}\n\nКод действителен 15 минут."
+    await send_real_email(email_to=user.email, subject=subject, body=body)
     
     # Возвращаем статус 202, сообщая фронтенду, что требуется ввод кода
     return Response(
@@ -187,10 +191,10 @@ async def request_email_verification(
     db.add(new_code)
     await db.commit()
     
-    # Mock отправки email
-    logger.info("\n" + "="*50)
-    logger.info(f"📧 EMAIL MOCK: Код подтверждения для {current_user.email} -> {code}")
-    logger.info("="*50 + "\n")
+    # ОТПРАВЛЯЕМ РЕАЛЬНОЕ ПИСЬМО
+    subject = "Подтверждение Email - ИнвестМонитор72"
+    body = f"Здравствуйте!\n\nВаш код для подтверждения электронной почты: {code}\n\nКод действителен 1 час."
+    await send_real_email(email_to=current_user.email, subject=subject, body=body)
     
     return {"message": "Код подтверждения отправлен на почту"}
 
