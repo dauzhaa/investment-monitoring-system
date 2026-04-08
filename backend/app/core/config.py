@@ -18,14 +18,14 @@ class Settings(BaseSettings):
     
     # Database
     DATABASE_URL: str
-    DATABASE_SYNC_URL: str
+    DATABASE_SYNC_URL: str = ""
     
     # Redis
     REDIS_URL: str
     
     # Celery
-    CELERY_BROKER_URL: str
-    CELERY_RESULT_BACKEND: str
+    CELERY_BROKER_URL: str = "redis://redis:6379/0"
+    CELERY_RESULT_BACKEND: str = "redis://redis:6379/0"
     
     # CORS
     BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = []

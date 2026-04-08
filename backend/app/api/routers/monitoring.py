@@ -127,3 +127,4 @@ async def get_monitoring_summary(year: int = Query(default=None), db: AsyncSessi
             "overdue": status["overdue"], "not_planned": status["not_planned"], "percent": status["percent"]
         })
     return {"year": year, "quarters": results}
+
