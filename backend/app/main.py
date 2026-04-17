@@ -105,7 +105,7 @@ app.include_router(
 
 app.include_router(audit.router, prefix="/api/v1")
 app.include_router(notifications.router, prefix="/api/v1")
-app.include_router(export.router, prefix="/api/v1")
+app.include_router(export.router, prefix="/api/v1/export", tags=["Export"])
 
 @app.get("/")
 async def root():

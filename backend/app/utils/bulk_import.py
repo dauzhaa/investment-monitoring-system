@@ -283,13 +283,22 @@ async def run_import():
                 
                 for file_name in files:
                     file_path = os.path.join(period_path, file_name)
-                    success = await process_file(file_path, year, quarter, db)
-                    if success:
+                    # Теперь мы получаем словарь result, а не просто "успех"
+                    result = await process_file(file_path, year, quarter, db)
+                    
+                    # 1. Выводим ошибки Pydantic в консоль (первые 3 штуки, чтобы не засорять логи)
+                    if result.get("errors"):
+                        logger.warning(f"⚠️ Ошибки валидации в {file_name} (всего {len(result['errors'])}):")
+                        for err in result["errors"][:3]:
+                            logger.warning(f"   Стр {err['row']} | Орг: {err['organization']} | Ошибки: {err['issues']}")
+                    
+                    # 2. Файл считается обработанным, только если загружена ХОТЯ БЫ 1 строка
+                    if result.get("success", 0) > 0:
                         processed_total += 1
                     
-                    if processed_total % 50 == 0:
+                    if processed_total > 0 and processed_total % 50 == 0:
                         await db.commit()
-                        logger.info(f"    ⏳ Закоммичено {processed_total} файлов...")
+                        logger.info(f"    ⏳ Закоммичено файлов с полезными данными: {processed_total}...")
 
         await db.commit()
         logger.info(f"✅ Импорт успешно завершен! Всего обработано файлов: {processed_total}")

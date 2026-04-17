@@ -22,7 +22,7 @@ class District(Base):
         return f"<District(id={self.id}, name='{self.name}')>"
 
 
-class Okved(Base):
+class Okved(Base): 
     """Справочник: Коды ОКВЭД."""
     __tablename__ = "directory_okveds"
 
