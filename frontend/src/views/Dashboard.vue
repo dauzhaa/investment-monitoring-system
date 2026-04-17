@@ -4,9 +4,15 @@
       <v-select v-model="startYear" :items="availableYears" label="С года" variant="outlined" density="compact" hide-details color="primary" style="max-width: 140px;" />
       <span class="text-grey-darken-1">—</span>
       <v-select v-model="endYear" :items="availableYears" label="По год" variant="outlined" density="compact" hide-details color="primary" style="max-width: 140px;" />
+      
       <v-spacer />
+      
       <v-btn variant="flat" color="primary" size="small" prepend-icon="mdi-refresh" :loading="loading" @click="loadData">
         Обновить данные
+      </v-btn>
+      
+      <v-btn variant="flat" color="#1B3A5C" size="small" prepend-icon="mdi-file-pdf-box" :loading="isExportingPdf" @click="downloadPdfReport" class="text-white">
+        Скачать PDF
       </v-btn>
     </div>
 
@@ -109,6 +115,44 @@ const availableYears = [2022, 2023, 2024, 2025]
 const startYear = ref(2022)
 const endYear = ref(2025)
 const loading = ref(false)
+
+const isExportingPdf = ref(false)
+
+async function downloadPdfReport() {
+  isExportingPdf.value = true
+  try {
+    const response = await analyticsAPI.exportPdf({ 
+      start_year: startYear.value, 
+      end_year: endYear.value 
+    })
+
+    // Магия браузера для скачивания файла
+    const url = window.URL.createObjectURL(new Blob([response.data]))
+    const link = document.createElement('a')
+    link.href = url
+    
+    // Пытаемся достать оригинальное имя файла от бэкенда
+    const contentDisposition = response.headers['content-disposition']
+    let fileName = `Analytics_Report_${startYear.value}_${endYear.value}.pdf`
+    if (contentDisposition) {
+      const fileNameMatch = contentDisposition.match(/filename="?([^"]+)"?/)
+      if (fileNameMatch && fileNameMatch.length === 2) {
+        fileName = fileNameMatch[1]
+      }
+    }
+    
+    link.setAttribute('download', fileName)
+    document.body.appendChild(link)
+    link.click()
+    link.parentNode.removeChild(link)
+    window.URL.revokeObjectURL(url)
+
+  } catch (error) {
+    console.error("Ошибка при скачивании PDF:", error)
+  } finally {
+    isExportingPdf.value = false
+  }
+}
 
 const stats = ref({ factTotal: 0, planTotal: 0, executionPercent: 0, orgsWithInvestments: 0, orgsWithoutInvestments: 0 })
 const quarters = ref([])

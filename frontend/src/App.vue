@@ -7,7 +7,7 @@
     <v-app :theme="darkMode ? 'dark' : 'light'">
       <v-navigation-drawer v-model="drawer" :rail="rail" permanent class="sidebar-drawer" color="#0F2439" width="280">
         <div class="sidebar-brand" :class="{ 'sidebar-brand--rail': rail }">
-          <div class="brand-icon">
+          <div class="brand-icon"> 
             <v-icon size="28" color="white">mdi-chart-areaspline</v-icon>
           </div>
           <transition name="fade">
@@ -31,6 +31,7 @@
             class="nav-item mb-1"
             active-class="nav-item--active"
           />
+
         </v-list>
 
         <template #append>
@@ -85,7 +86,7 @@
                   <v-list-item-subtitle class="text-caption text-grey mt-1">{{ new Date(n.created_at).toLocaleString('ru-RU') }}</v-list-item-subtitle>
                   <div class="text-body-2 mt-1 mb-1" style="color: var(--text-primary); line-height: 1.4;">{{ n.message }}</div>
                   <template v-slot:append v-if="!n.is_read">
-                     <v-btn icon="mdi-check-all" size="small" variant="text" color="#1B3A5C" title="Прочитано" @click="markAsRead(n.id)"></v-btn>
+                      <v-btn icon="mdi-check-all" size="small" variant="text" color="#1B3A5C" title="Прочитано" @click="markAsRead(n.id)"></v-btn>
                   </template>
                 </v-list-item>
               </v-list>
@@ -135,7 +136,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { notificationsAPI, authAPI } from '@/services/api' // убрал default api если не юзается
+import { notificationsAPI, authAPI } from '@/services/api' 
 
 const route = useRoute()
 const router = useRouter()
@@ -153,6 +154,7 @@ const adminNav = [
   { to: '/monitoring', icon: 'mdi-clipboard-check-outline', title: 'Мониторинг сдачи' },
   { to: '/organizations', icon: 'mdi-domain', title: 'Организации' },
   { to: '/upload', icon: 'mdi-cloud-upload-outline', title: 'Загрузка данных' },
+  { to: '/debtors', icon: 'mdi-account-alert-outline', title: 'Реестр должников' },
 ]
 
 const orgNav = [
@@ -167,7 +169,8 @@ const pageTitles = {
   '/organizations': 'Организации',
   '/upload': 'Загрузка данных',
   '/org-dashboard': 'Личный кабинет',
-  '/profile': 'Профиль и Аудит'
+  '/profile': 'Профиль и Аудит',
+  '/debtors': 'Контроль сроков (Должники)' // <-- Добавлено название страницы
 }
 
 const currentPageTitle = computed(() => {

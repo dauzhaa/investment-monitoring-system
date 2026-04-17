@@ -52,7 +52,13 @@ const routes = [
   {
     path: '/:pathMatch(.*)*',
     redirect: '/'
-  }
+  },
+  {
+  path: '/debtors',
+  name: 'Debtors',
+  component: () => import('@/views/Debtors.vue'),
+  meta: { requiresAuth: true, role: 'admin' } // Страница только для админа
+  },
 ]
 
 const router = createRouter({

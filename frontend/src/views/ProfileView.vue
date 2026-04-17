@@ -3,7 +3,7 @@
     <v-card class="stat-card" elevation="0">
       <v-tabs v-model="activeTab" color="#1B3A5C" align-tabs="start">
         <v-tab value="profile">Данные профиля</v-tab>
-        <v-tab value="audit">Журнал аудита</v-tab>
+        <v-tab value="audit" v-if="authStore.isAdmin">Журнал аудита</v-tab>
       </v-tabs>
 
       <v-card-text class="pt-6">
@@ -32,7 +32,7 @@
             </v-row>
           </v-window-item>
 
-          <v-window-item value="audit">
+          <v-window-item value="audit" v-if="authStore.isAdmin">
             <v-data-table :headers="auditHeaders" :items="auditLogs" :loading="loadingAudit" hover class="border rounded">
               <template #[`item.created_at`]="{ item }">
                 {{ new Date(item.created_at).toLocaleString('ru-RU') }}
@@ -51,7 +51,6 @@
 <script setup>
 import { ref, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-// Убедись, что импортируешь правильный инстанс axios
 import api from '@/services/api' 
 
 const authStore = useAuthStore()
@@ -67,6 +66,7 @@ const auditHeaders = [
 ]
 
 async function loadAudit() {
+  if (!authStore.isAdmin) return // Защита от лишних запросов
   loadingAudit.value = true
   try {
     const { data } = await api.get('/audit/')

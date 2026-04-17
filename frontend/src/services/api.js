@@ -75,20 +75,26 @@ export const notificationsAPI = {
 
 // ============ ANALYTICS / DASHBOARD ============
 export const analyticsAPI = {
-  getDashboard(year) {
-    return api.get('/analytics/dashboard', { params: { year } })
+  getDashboard(params) {
+    return api.get('/analytics/dashboard', { params })
   },
-  getTrends(year) {
-    return api.get('/analytics/trends', { params: { year } })
+  getTrends(params) {
+    return api.get('/analytics/trends', { params })
   },
-  getQuarters(year) {
-    return api.get('/analytics/quarters', { params: { year } })
+  getQuarters(params) {
+    return api.get('/analytics/quarters', { params })
   },
-  getMapData(year) {
-    return api.get('/analytics/map', { params: { year } })
+  getMapData(params) {
+    return api.get('/analytics/map', { params })
+  },
+  // НОВЫЙ МЕТОД ДЛЯ PDF
+  exportPdf(params) {
+    return api.get('/export/analytics-pdf', { 
+      params, 
+      responseType: 'blob' // Обязательно указываем, что ждем бинарный файл
+    })
   }
 }
-
 // ============ ORGANIZATIONS ============
 export const organizationsAPI = {
   getAll(params = {}) {
