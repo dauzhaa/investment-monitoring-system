@@ -91,18 +91,21 @@ async def process_file(file_path: str, year: int, quarter: int | None, db: Async
             if not row[1] and not row[2]:
                 continue
 
+            def safe_str(val):
+                if val is None: return None
+                return str(val).split('.')[0].strip()
+
             raw_data = {
-                "name": row[1],
+                "name": str(row[1]).strip() if row[1] else "Неизвестно",
                 "inn": row[2],
                 "is_smp": row[3],
-                "okpo": row[4],
-                "okved_code": row[5],
+                "okpo": safe_str(row[4]),
+                "okved_code": safe_str(row[5]),
                 "forecast": row[6],
                 "amount": row[7],
                 "submit_date": row[8],
-                "reason": row[9],
+                "reason": str(row[9]).strip() if row[9] else None,
             }
-
             # 1. СТРОГАЯ ВАЛИДАЦИЯ ЧЕРЕЗ PYDANTIC
             try:
                 valid_data = ExcelRowSchema(**raw_data)
