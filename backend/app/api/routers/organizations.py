@@ -1,24 +1,36 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, or_
+from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
-from app.core.database import get_db
-from app.models.organization import Organization
-from app.models.directories import District, Okved
-from app.models.investment_fact import InvestmentFact
-from app.models.investment_forecast import InvestmentForecast
-from app.models.report_submission import ReportSubmission
 from io import BytesIO
-from typing import Optional, List
+from typing import Optional
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
 from datetime import date
+import logging
+
+from app.core.database import get_db
+from app.api.dependencies import get_current_user
+from app.core.security import hash_password as get_password_hash
+
+# Модели
+from app.models.organization import Organization
+from app.models.directories import District
+from app.models.investment_fact import InvestmentFact
+from app.models.investment_forecast import InvestmentForecast
+from app.models.report_submission import ReportSubmission
+from app.models.user import User
+from app.models.user_credential import UserCredential
+from app.models.audit_log import AuditLog
+
+# Схемы
+from app.schemas.organization import OrganizationCreate, OrganizationUpdate
 
 router = APIRouter()
-
+logger = logging.getLogger(__name__)
 async def get_org_investments(db: AsyncSession, org_ids: list, year: int):
-    # Факт (максимальный нарастающий итог)
+    # (Твоя функция осталась без изменений)
     fact_res = await db.execute(
         select(InvestmentFact.organization_id, func.max(InvestmentFact.amount))
         .where(InvestmentFact.organization_id.in_(org_ids), InvestmentFact.year == year)
@@ -26,7 +38,6 @@ async def get_org_investments(db: AsyncSession, org_ids: list, year: int):
     )
     facts = dict(fact_res.all())
     
-    # План (последнее уточнение)
     plan_subq = select(InvestmentForecast.organization_id, func.max(InvestmentForecast.id).label("mid")).where(
         InvestmentForecast.organization_id.in_(org_ids), InvestmentForecast.year == year
     ).group_by(InvestmentForecast.organization_id).subquery()
@@ -37,7 +48,6 @@ async def get_org_investments(db: AsyncSession, org_ids: list, year: int):
     )
     plans = dict(plan_res.all())
     
-    # Статус сдачи (годовой)
     subm_res = await db.execute(
         select(ReportSubmission.organization_id, ReportSubmission.status)
         .where(ReportSubmission.organization_id.in_(org_ids), ReportSubmission.year == year, ReportSubmission.quarter == 4)
@@ -50,7 +60,9 @@ async def get_org_investments(db: AsyncSession, org_ids: list, year: int):
 async def get_organizations(
     year: int = Query(default=None), district: Optional[str] = Query(default=None),
     districts: Optional[str] = Query(default=None), smp: Optional[bool] = Query(default=None),
-    search: Optional[str] = Query(default=None), db: AsyncSession = Depends(get_db)
+    search: Optional[str] = Query(default=None), 
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user) # 🔒 Защита
 ):
     if year is None: year = date.today().year
         
@@ -208,3 +220,128 @@ async def get_organization_details(org_id: int, db: AsyncSession = Depends(get_d
         },
         "reports": reports
     }
+    
+@router.post("/")
+async def create_organization(
+    org_in: OrganizationCreate, 
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Доступ запрещен. Только для администраторов.")
+
+    # Проверка на дубликат ИНН
+    existing_org = (await db.execute(select(Organization).where(Organization.inn == org_in.inn))).scalar_one_or_none()
+    if existing_org:
+        raise HTTPException(status_code=400, detail="Организация с таким ИНН уже существует.")
+
+    try:
+        # 1. Создаем организацию
+        new_org = Organization(**org_in.model_dump())
+        db.add(new_org)
+        await db.flush() # Получаем ID организации
+
+        # 2. Создаем пользователя для организации
+        org_email = f"info_{new_org.inn}@obr72.ru"
+        
+        # Проверяем, вдруг юзер с таким email уже есть (осиротевший)
+        existing_user = (await db.execute(select(User).where(User.email == org_email))).scalar_one_or_none()
+        if not existing_user:
+            new_user = User(
+                email=org_email,
+                role="organization",
+                organization_id=new_org.id,
+                is_active=True,
+                is_email_verified=True
+            )
+            db.add(new_user)
+            await db.flush()
+            
+            # Создаем пароль
+            db.add(UserCredential(
+                user_id=new_user.id,
+                hashed_password=get_password_hash(new_org.inn) # Пароль = ИНН
+            ))
+
+        # 3. Аудит
+        audit = AuditLog(
+            user_id=current_user.id,
+            action="create_organization",
+            entity_type="organization",
+            entity_id=new_org.id,
+            details={"inn": new_org.inn, "name": new_org.name, "created_user_email": org_email}
+        )
+        db.add(audit)
+        
+        await db.commit()
+        return {"status": "success", "id": new_org.id, "email": org_email, "message": "Организация и доступ созданы."}
+
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Error creating organization: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка при создании организации.")
+
+
+@router.put("/{org_id}")
+async def update_organization(
+    org_id: int, 
+    org_in: OrganizationUpdate, 
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Доступ запрещен.")
+
+    org = await db.get(Organization, org_id)
+    if not org:
+        raise HTTPException(status_code=404, detail="Организация не найдена")
+
+    update_data = org_in.model_dump(exclude_unset=True) # Только те поля, что переданы
+    
+    # Запоминаем старые данные для лога
+    old_data = {k: getattr(org, k) for k in update_data.keys()}
+
+    for field, value in update_data.items():
+        setattr(org, field, value)
+
+    # Аудит
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="update_organization",
+        entity_type="organization",
+        entity_id=org.id,
+        details={"changes": update_data, "old_data": old_data}
+    )
+    db.add(audit)
+    
+    await db.commit()
+    return {"status": "success", "message": "Организация обновлена"}
+
+
+@router.delete("/{org_id}")
+async def delete_organization(
+    org_id: int, 
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Доступ запрещен.")
+
+    org = await db.get(Organization, org_id)
+    if not org:
+        raise HTTPException(status_code=404, detail="Организация не найдена")
+
+    # Аудит (делаем до удаления, пока есть объект)
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="delete_organization",
+        entity_type="organization",
+        entity_id=org_id,
+        details={"inn": org.inn, "name": org.name}
+    )
+    db.add(audit)
+
+    await db.delete(org)
+    await db.commit()
+    
+    return {"status": "success", "message": "Организация удалена."}

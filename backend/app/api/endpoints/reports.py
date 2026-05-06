@@ -1,24 +1,33 @@
-from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, Query, Form
-from fastapi.responses import StreamingResponse
-import aiofiles
 import os
+import uuid
+import json
+import logging
 from datetime import datetime, date
 from io import BytesIO
+
+import aiofiles
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
-import logging
+
+from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, Query, Form
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.database import get_db
-from app.utils.bulk_import import process_file
-from app.models.report_submission import ReportSubmission
-from app.models.organization import Organization
-from sqlalchemy.orm import joinedload
 from sqlalchemy import select, desc
-from app.models.user import User
+from sqlalchemy.orm import joinedload
+from pydantic import ValidationError
+
+from app.core.database import get_db
 from app.api.dependencies import get_current_user
+from app.utils.bulk_import import process_file
+
+from app.models.user import User
+from app.models.organization import Organization
+from app.models.report_submission import ReportSubmission
 from app.models.investment_fact import InvestmentFact
 from app.models.investment_forecast import InvestmentForecast
+from app.models.uploaded_file import UploadedFile
+from app.models.audit_log import AuditLog
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -62,38 +71,136 @@ async def upload_file(
     file: UploadFile = File(...), 
     report_type: str = Form(default="annual"), 
     year: int = Form(default=None),
-    db: AsyncSession = Depends(get_db) # Добавили сессию БД
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)  # 🔒 Обязательно берем текущего юзера
 ):
-    if year is None: year = date.today().year
+    if year is None: 
+        year = date.today().year
     
-    # Определяем квартал из report_type (например, "q1", "q2" или "annual")
     quarter = None
     if report_type.startswith("q") and report_type[1].isdigit():
         quarter = int(report_type[1])
 
-    try:
-        # Сохраняем файл (твоя логика)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{timestamp}_{report_type}_{year}_{file.filename}"
-        path = os.path.join(UPLOAD_PATH, filename)
+    # 1. Генерируем безопасное UUID имя файла и сохраняем его физически
+    file_ext = file.filename.split('.')[-1] if '.' in file.filename else 'xlsx'
+    stored_filename = f"{uuid.uuid4()}.{file_ext}"
+    path = os.path.join(UPLOAD_PATH, stored_filename)
+    
+    content = await file.read()
+    file_size = len(content)
+    
+    async with aiofiles.open(path, 'wb') as f:
+        await f.write(content)
         
-        content = await file.read()
-        async with aiofiles.open(path, 'wb') as f:
-            await f.write(content)
-            
-        # ПРОЦЕССИНГ И ВАЛИДАЦИЯ
+    # 2. Создаем запись о файле со статусом 'processing'
+    uploaded_file_record = UploadedFile(
+        organization_id=current_user.organization_id,
+        original_filename=file.filename,
+        stored_filename=stored_filename,
+        file_type=file_ext,
+        file_size_bytes=file_size,
+        year=year,
+        quarter=quarter,
+        processing_status="processing",
+        uploaded_by_user_id=current_user.id
+    )
+    db.add(uploaded_file_record)
+    await db.flush() # flush, чтобы получить ID файла для AuditLog
+
+    # Базовые данные для лога
+    audit_details = {
+        "original_filename": file.filename,
+        "stored_filename": stored_filename,
+        "file_size": file_size,
+        "report_type": report_type,
+        "year": year,
+        "quarter": quarter
+    }
+
+    try:
+        # 3. Парсинг и валидация через твой bulk_import.py
         import_results = await process_file(path, year, quarter, db)
-        await db.commit() # Коммитим успешные строки
+        
+        # Если process_file возвращает массив errors (наша бизнес-логика валидации)
+        if import_results.get("errors"):
+            uploaded_file_record.processing_status = "error"
+            # Сохраняем ошибки как JSON строку
+            uploaded_file_record.error_message = json.dumps(import_results["errors"], ensure_ascii=False)
+            
+            audit_details["status"] = "error_validation"
+            audit_details["errors_count"] = len(import_results["errors"])
+        else:
+            # 4. Все отлично, данные валидны
+            uploaded_file_record.processing_status = "success"
+            audit_details["status"] = "success"
+            audit_details["records_inserted"] = import_results.get("success", 0)
+            
+            # Обновляем статус в таблице ReportSubmissions (отчет сдан)
+            if current_user.organization_id:
+                stmt = select(ReportSubmission).where(
+                    ReportSubmission.organization_id == current_user.organization_id,
+                    ReportSubmission.year == year,
+                    ReportSubmission.quarter == (quarter or 4) # Если annual, обычно привязан к 4 кварталу
+                )
+                submission = (await db.execute(stmt)).scalars().first()
+                if submission:
+                    submission.status = "submitted"
+                    submission.submitted_date = date.today()
+
+        # 5. Записываем действие в Аудит лог
+        audit_log = AuditLog(
+            user_id=current_user.id,
+            action="upload_file",
+            entity_type="uploaded_file",
+            entity_id=uploaded_file_record.id,
+            details=audit_details
+        )
+        db.add(audit_log)
+        await db.commit()
 
         return {
-            "status": "success" if not import_results["errors"] else "partial_success",
-            "records_inserted": import_results["success"],
-            "errors": import_results["errors"], # Возвращаем массив ошибок фронтенду
-            "filename": filename
+            "status": uploaded_file_record.processing_status,
+            "file_id": uploaded_file_record.id,
+            "records_inserted": import_results.get("success", 0),
+            "errors": import_results.get("errors", [])
         }
+
+    except ValidationError as ve:
+        # Перехват жестких ошибок Pydantic (если process_file прокидывает их наверх)
+        await db.rollback() # Откатываем транзакцию фактов инвестиций
+        
+        errors = ve.errors()
+        uploaded_file_record.processing_status = "error"
+        uploaded_file_record.error_message = json.dumps(errors, ensure_ascii=False)
+        
+        audit_details["status"] = "error_pydantic"
+        audit_details["exception"] = str(errors)
+        
+        # Пишем в лог, что загрузка провалилась
+        audit_log = AuditLog(user_id=current_user.id, action="upload_file_failed", entity_type="uploaded_file", entity_id=uploaded_file_record.id, details=audit_details)
+        db.add(uploaded_file_record)
+        db.add(audit_log)
+        await db.commit()
+        
+        return {"status": "error", "file_id": uploaded_file_record.id, "errors": errors}
+
     except Exception as e:
+        # Любые другие краши (БД упала, нет колонок в Excel и тд)
         await db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Critical error processing file: {str(e)}")
+        
+        uploaded_file_record.processing_status = "error"
+        uploaded_file_record.error_message = json.dumps({"system_error": str(e)}, ensure_ascii=False)
+        
+        audit_details["status"] = "system_error"
+        audit_details["exception"] = str(e)
+        
+        audit_log = AuditLog(user_id=current_user.id, action="upload_file_crashed", entity_type="uploaded_file", entity_id=uploaded_file_record.id, details=audit_details)
+        db.add(uploaded_file_record)
+        db.add(audit_log)
+        await db.commit()
+        
+        raise HTTPException(status_code=500, detail="Системная ошибка при обработке файла. Информация передана администратору.")
 @router.get("/template/{report_type}")
 async def download_template(report_type: str):
     wb = openpyxl.Workbook()
