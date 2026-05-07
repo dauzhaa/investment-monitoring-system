@@ -13,6 +13,7 @@ from app.api.routers import monitoring
 from app.api.routers import audit, notifications
 from app.api.endpoints import export
 from app.api.routers import bot
+from app.api.routers import analytics_center
 
 
 logging.basicConfig(
@@ -108,6 +109,7 @@ app.include_router(audit.router, prefix="/api/v1")
 app.include_router(notifications.router, prefix="/api/v1")
 app.include_router(export.router, prefix="/api/v1/export", tags=["Export"])
 app.include_router(bot.router, prefix="/api/v1/bot", tags=["bot"])
+app.include_router(analytics_center.router, prefix="/api/v1")
 
 @app.get("/")
 async def root():

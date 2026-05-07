@@ -4,7 +4,7 @@ from datetime import datetime
 from sqlalchemy import select
 from app.core.database import AsyncSessionLocal
 from app.models.organization import Organization
-from app.models.directories import District
+from app.models.directories import District, Okved, OrgCategory
 from app.models.investment_fact import InvestmentFact
 from app.models.investment_forecast import InvestmentForecast
 from app.models.report_submission import ReportSubmission
@@ -80,6 +80,32 @@ async def import_synthetic_data(xlsx_file_path: str):
                 district = District(name=district_name)
                 db.add(district)
                 await db.flush()
+                
+            # 1.5. Обработка ОКВЭД и Категории
+            okved_code = str(row.get('ОКВЭД2', '')).strip()
+            okved_id = None
+            if okved_code and okved_code != 'None':
+                okved = (await db.execute(select(Okved).where(Okved.code == okved_code))).scalar_one_or_none()
+                if not okved:
+                    okved = Okved(code=okved_code, name=f"ОКВЭД {okved_code}") # Создаем заглушку, если нет в справочнике
+                    db.add(okved)
+                    await db.flush()
+                okved_id = okved.id
+
+            category_val = str(row.get('Категория', '')).strip()
+            category_id = None
+            if category_val and category_val != 'None':
+                try:
+                    # Excel иногда читает числа как 1.0, поэтому float -> int
+                    cat_id_int = int(float(category_val))
+                    category = (await db.execute(select(OrgCategory).where(OrgCategory.id == cat_id_int))).scalar_one_or_none()
+                    if not category:
+                        category = OrgCategory(id=cat_id_int, name=f"Категория {cat_id_int}")
+                        db.add(category)
+                        await db.flush()
+                    category_id = category.id
+                except ValueError:
+                    pass
 
             # 2. Организация
             inn = str(row.get('ИНН', '')).strip()
@@ -103,11 +129,25 @@ async def import_synthetic_data(xlsx_file_path: str):
                     inn=inn,
                     district_id=district.id,
                     is_smp=is_smp_val,
+                    okved_id=okved_id,       # <-- Добавили
+                    category_id=category_id, # <-- Добавили
                     contact_email=_clean_email(row.get('Email'), inn),
                 )
                 db.add(org)
                 await db.flush()
                 inserted['orgs'] += 1
+            else:
+                # Если организация уже есть в базе, но ОКВЭД/Категория пустые — обновляем их
+                update_needed = False
+                if org.okved_id is None and okved_id is not None:
+                    org.okved_id = okved_id
+                    update_needed = True
+                if org.category_id is None and category_id is not None:
+                    org.category_id = category_id
+                    update_needed = True
+                
+                if update_needed:
+                    await db.flush()
 
             # 3. Импорт Плана (Forecast) — идемпотентно
             plan_2024 = _to_float(row.get('Прогноз на 2024 год, тыс. руб.'))

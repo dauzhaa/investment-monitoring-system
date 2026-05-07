@@ -71,6 +71,11 @@ const routes = [
     // Укажи правильный путь до папки, куда ты положил Assistant.vue
     component: () => import('@/views/Assistant.vue') 
   },
+  {
+  path: '/analytics-center',
+  component: () => import('@/views/AnalyticsCenter.vue'),
+  meta: { requiresAuth: true, title: 'Аналитический центр' },
+},
 ]
 
 const router = createRouter({

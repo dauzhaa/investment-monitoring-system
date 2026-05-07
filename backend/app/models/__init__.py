@@ -20,6 +20,7 @@ from .email_verification_code import EmailVerificationCode
 from .user_session import UserSession
 from .audit_log import AuditLog
 from .notification import Notification
+from .organization_ipo import OrganizationIPO
 
 __all__ = [
     "Base",
@@ -41,4 +42,5 @@ __all__ = [
     "UserSession",
     "AuditLog",
     "Notification",
+    "OrganizationIPO",
 ]
