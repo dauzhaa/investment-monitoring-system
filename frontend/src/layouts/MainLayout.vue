@@ -28,6 +28,13 @@
           title="Организации" 
           value="orgs"
         ></v-list-item>
+        <v-list-item 
+          to="/ipo-analytics" 
+          title="Центр ИПО" 
+          prepend-icon="mdi-radar" 
+          value="ipo-analytics"
+          class="text-blue-darken-3 font-weight-medium"
+        ></v-list-item>
         <v-list-item to="/analytics" title="Аналитика" prepend-icon="mdi-chart-bar" value="analytics"></v-list-item>
         <v-list-item
           prepend-icon="mdi-stamper" 

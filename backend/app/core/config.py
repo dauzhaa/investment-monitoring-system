@@ -67,6 +67,11 @@ class Settings(BaseSettings):
         env_ignore_empty=True,
         extra="ignore"
     )
+    
+    GIGACHAT_AUTH_KEY: str | None = None
+    GIGACHAT_SCOPE: str = "GIGACHAT_API_PERS"
+    GIGACHAT_MODEL: str = "GigaChat"
+    GIGACHAT_CERT_PATH: str = "./certs/russian_trusted_root_ca.cer"
 
 
 # Создаем экземпляр настроек

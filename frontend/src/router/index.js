@@ -59,6 +59,18 @@ const routes = [
   component: () => import('@/views/Debtors.vue'),
   meta: { requiresAuth: true, role: 'admin' } // Страница только для админа
   },
+  {
+    path: '/ipo-analytics',  // <--- НОВЫЙ РОУТ
+    name: 'IpoAnalytics',
+    component: () => import('@/views/IpoAnalytics.vue'),
+    meta: { requiresAuth: true, roles: ['admin'] }
+  },
+  {
+    path: '/assistant',
+    name: 'Assistant',
+    // Укажи правильный путь до папки, куда ты положил Assistant.vue
+    component: () => import('@/views/Assistant.vue') 
+  },
 ]
 
 const router = createRouter({

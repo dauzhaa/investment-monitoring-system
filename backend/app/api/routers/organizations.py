@@ -20,17 +20,26 @@ from app.models.directories import District
 from app.models.investment_fact import InvestmentFact
 from app.models.investment_forecast import InvestmentForecast
 from app.models.report_submission import ReportSubmission
+from app.models.uploaded_file import UploadedFile
 from app.models.user import User
 from app.models.user_credential import UserCredential
 from app.models.audit_log import AuditLog
 
-# Схемы
+# Схемы и сервисы
 from app.schemas.organization import OrganizationCreate, OrganizationUpdate
+from app.services.ipo_calculator import IPOCalculator  # Убедись, что путь правильный
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-async def get_org_investments(db: AsyncSession, org_ids: list, year: int):
-    # (Твоя функция осталась без изменений)
+
+async def get_organizations_aggregated_data(db: AsyncSession, org_ids: list[int], year: int):
+    """
+    Эффективная агрегация всех данных для ИПО (Факт, План, Ошибки валидации, Сдачи отчетов).
+    """
+    if not org_ids:
+        return {}, {}, {}, {}
+
+    # 1. Фактические инвестиции
     fact_res = await db.execute(
         select(InvestmentFact.organization_id, func.max(InvestmentFact.amount))
         .where(InvestmentFact.organization_id.in_(org_ids), InvestmentFact.year == year)
@@ -38,8 +47,13 @@ async def get_org_investments(db: AsyncSession, org_ids: list, year: int):
     )
     facts = dict(fact_res.all())
     
-    plan_subq = select(InvestmentForecast.organization_id, func.max(InvestmentForecast.id).label("mid")).where(
-        InvestmentForecast.organization_id.in_(org_ids), InvestmentForecast.year == year
+    # 2. Плановые инвестиции (берем последний прогноз по ID)
+    plan_subq = select(
+        InvestmentForecast.organization_id, 
+        func.max(InvestmentForecast.id).label("mid")
+    ).where(
+        InvestmentForecast.organization_id.in_(org_ids), 
+        InvestmentForecast.year == year
     ).group_by(InvestmentForecast.organization_id).subquery()
     
     plan_res = await db.execute(
@@ -48,13 +62,51 @@ async def get_org_investments(db: AsyncSession, org_ids: list, year: int):
     )
     plans = dict(plan_res.all())
     
-    subm_res = await db.execute(
-        select(ReportSubmission.organization_id, ReportSubmission.status)
-        .where(ReportSubmission.organization_id.in_(org_ids), ReportSubmission.year == year, ReportSubmission.quarter == 4)
+    # 3. Количество ошибок качества данных (Из UploadedFile)
+    errors_res = await db.execute(
+        select(UploadedFile.organization_id, func.count(UploadedFile.id))
+        .where(
+            UploadedFile.organization_id.in_(org_ids),
+            UploadedFile.year == year,
+            UploadedFile.processing_status == 'error'
+        )
+        .group_by(UploadedFile.organization_id)
     )
-    statuses = dict(subm_res.all())
+    errors = dict(errors_res.all())
+
+    # 4. История сдач отчетов
+    subm_res = await db.execute(
+        select(
+            ReportSubmission.organization_id, 
+            ReportSubmission.quarter, 
+            ReportSubmission.status, 
+            ReportSubmission.days_overdue
+        )
+        .where(
+            ReportSubmission.organization_id.in_(org_ids), 
+            ReportSubmission.year == year
+        )
+    )
     
-    return facts, plans, statuses
+    submissions = {org_id: [] for org_id in org_ids}
+    for row in subm_res.all():
+        submissions[row.organization_id].append({
+            "quarter": row.quarter,
+            "status": row.status,
+            "days_overdue": row.days_overdue
+        })
+    
+    return facts, plans, errors, submissions
+
+def get_current_quarter(target_year: int) -> int:
+    """Вычисляет текущий квартал для расчетов."""
+    today = date.today()
+    if target_year == today.year:
+        return (today.month - 1) // 3 + 1
+    elif target_year < today.year:
+        return 4
+    return 1
+
 
 @router.get("/")
 async def get_organizations(
@@ -62,9 +114,10 @@ async def get_organizations(
     districts: Optional[str] = Query(default=None), smp: Optional[bool] = Query(default=None),
     search: Optional[str] = Query(default=None), 
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user) # 🔒 Защита
+    current_user: User = Depends(get_current_user)
 ):
     if year is None: year = date.today().year
+    current_quarter = get_current_quarter(year)
         
     stmt = select(Organization).options(selectinload(Organization.district), selectinload(Organization.okved))
     
@@ -81,10 +134,29 @@ async def get_organizations(
     orgs = (await db.execute(stmt)).scalars().all()
     
     org_ids = [org.id for org in orgs]
-    facts, plans, statuses = await get_org_investments(db, org_ids, year)
+    facts, plans, errors, submissions = await get_organizations_aggregated_data(db, org_ids, year)
     
     result = []
     for org in orgs:
+        fact_val = float(facts.get(org.id, 0))
+        plan_val = float(plans.get(org.id, 0))
+        err_count = errors.get(org.id, 0)
+        org_subs = submissions.get(org.id, [])
+        
+        # Получаем статус за 4-й квартал (для обратной совместимости старого поля status)
+        q4_status = next((s['status'] for s in org_subs if s['quarter'] == 4), None)
+
+        # Рассчитываем ИПО
+        ipo_data = IPOCalculator.calculate(
+            is_smp=org.is_smp,
+            year=year,
+            current_quarter=current_quarter,
+            submissions=org_subs,
+            errors_count=err_count,
+            fact_amount=fact_val,
+            plan_amount=plan_val
+        )
+
         result.append({
             "id": org.id,
             "name": org.name,
@@ -93,9 +165,10 @@ async def get_organizations(
             "okved": {"code": org.okved.code} if org.okved else None,
             "is_smp": org.is_smp,
             "contact_email": org.contact_email,
-            "fact_amount": float(facts.get(org.id, 0)),
-            "plan_amount": float(plans.get(org.id, 0)),
-            "status": statuses.get(org.id)
+            "fact_amount": fact_val,
+            "plan_amount": plan_val,
+            "status": q4_status,
+            "ipo": ipo_data  # Отдаем на фронтенд ИПО и разбивку по индексам
         })
     return result
 
@@ -110,6 +183,7 @@ async def export_organizations(
     smp: Optional[str] = Query(default=None), db: AsyncSession = Depends(get_db)
 ):
     if year is None: year = date.today().year
+    current_quarter = get_current_quarter(year)
     
     stmt = select(Organization).options(selectinload(Organization.district), selectinload(Organization.okved))
     
@@ -122,23 +196,25 @@ async def export_organizations(
     
     orgs = (await db.execute(stmt.order_by(Organization.name))).scalars().all()
     org_ids = [org.id for org in orgs]
-    facts, plans, _ = await get_org_investments(db, org_ids, year)
+    
+    facts, plans, errors, submissions = await get_organizations_aggregated_data(db, org_ids, year)
     
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = f"Организации {year}"
     
     district_names = districts if districts else "Все районы"
-    ws.merge_cells('A1:H1')
-    ws['A1'] = f"Отчёт об инвестициях организаций за {year} год"
+    ws.merge_cells('A1:J1')
+    ws['A1'] = f"Отчёт об инвестициях и надежности организаций за {year} год"
     ws['A1'].font = Font(bold=True, size=14)
     ws['A1'].alignment = Alignment(horizontal='center')
     
-    ws.merge_cells('A2:H2')
+    ws.merge_cells('A2:J2')
     ws['A2'] = f"Районы: {district_names}"
     ws['A2'].alignment = Alignment(horizontal='center')
     
-    headers = ['№', 'Наименование', 'ИНН', 'Район', 'ОКВЭД', 'СМП', 'ФАКТ (тыс. ₽)', 'ПЛАН (тыс. ₽)']
+    # Добавили колонки для ИПО
+    headers = ['№', 'Наименование', 'ИНН', 'Район', 'ОКВЭД', 'СМП', 'ФАКТ (тыс. ₽)', 'ПЛАН (тыс. ₽)', 'Индекс (ИПО)', 'Статус ИПО']
     header_fill = PatternFill(start_color='1976D2', end_color='1976D2', fill_type='solid')
     header_font = Font(bold=True, color='FFFFFF')
     
@@ -149,14 +225,30 @@ async def export_organizations(
         cell.alignment = Alignment(horizontal='center')
     
     for row_num, org in enumerate(orgs, 5):
+        fact_val = float(facts.get(org.id, 0))
+        plan_val = float(plans.get(org.id, 0))
+        
+        # Считаем ИПО для Excel
+        ipo_data = IPOCalculator.calculate(
+            is_smp=org.is_smp,
+            year=year,
+            current_quarter=current_quarter,
+            submissions=submissions.get(org.id, []),
+            errors_count=errors.get(org.id, 0),
+            fact_amount=fact_val,
+            plan_amount=plan_val
+        )
+
         ws.cell(row=row_num, column=1, value=row_num - 4)
         ws.cell(row=row_num, column=2, value=org.name)
         ws.cell(row=row_num, column=3, value=org.inn)
         ws.cell(row=row_num, column=4, value=org.district.name if org.district else '')
         ws.cell(row=row_num, column=5, value=org.okved.code if org.okved else '')
         ws.cell(row=row_num, column=6, value='Да' if org.is_smp else 'Нет')
-        ws.cell(row=row_num, column=7, value=float(facts.get(org.id, 0)))
-        ws.cell(row=row_num, column=8, value=float(plans.get(org.id, 0)))
+        ws.cell(row=row_num, column=7, value=fact_val)
+        ws.cell(row=row_num, column=8, value=plan_val)
+        ws.cell(row=row_num, column=9, value=ipo_data["ipo"])
+        ws.cell(row=row_num, column=10, value=ipo_data["label"])
     
     ws.column_dimensions['A'].width = 5
     ws.column_dimensions['B'].width = 50
@@ -166,6 +258,8 @@ async def export_organizations(
     ws.column_dimensions['F'].width = 8
     ws.column_dimensions['G'].width = 15
     ws.column_dimensions['H'].width = 15
+    ws.column_dimensions['I'].width = 15
+    ws.column_dimensions['J'].width = 20
     
     buffer = BytesIO()
     wb.save(buffer)

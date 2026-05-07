@@ -43,3 +43,5 @@ loguru==0.7.3
 
 reportlab
 matplotlib
+
+slowapi==0.1.9

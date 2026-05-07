@@ -31,7 +31,6 @@
             class="nav-item mb-1"
             active-class="nav-item--active"
           />
-
         </v-list>
 
         <template #append>
@@ -155,10 +154,15 @@ const adminNav = [
   { to: '/organizations', icon: 'mdi-domain', title: 'Организации' },
   { to: '/upload', icon: 'mdi-cloud-upload-outline', title: 'Загрузка данных' },
   { to: '/debtors', icon: 'mdi-account-alert-outline', title: 'Реестр должников' },
+  { to: '/ipo-analytics', icon: 'mdi-radar', title: 'ИПО' },
+  // 👇 ДОБАВЛЕНО: Ссылка на AI-Аналитика в сайдбаре
+  { to: '/assistant', icon: 'mdi-robot-outline', title: 'AI-Аналитик' },
 ]
 
 const orgNav = [
   { to: '/org-dashboard', icon: 'mdi-view-dashboard-outline', title: 'Мой кабинет' },
+  // Можешь раскомментировать строку ниже, если хочешь, чтобы организации тоже могли общаться с ботом
+  // { to: '/assistant', icon: 'mdi-robot-outline', title: 'AI-Помощник' },
 ]
 
 const navItems = computed(() => authStore.isOrganization ? orgNav : adminNav)
@@ -170,7 +174,10 @@ const pageTitles = {
   '/upload': 'Загрузка данных',
   '/org-dashboard': 'Личный кабинет',
   '/profile': 'Профиль и Аудит',
-  '/debtors': 'Контроль сроков (Должники)' // <-- Добавлено название страницы
+  '/debtors': 'Контроль сроков (Должники)',
+  '/ipo-analytics': 'ИПО',
+  // 👇 ДОБАВЛЕНО: Заголовок для страницы Аналитика в верхнем тулбаре
+  '/assistant': 'AI-Аналитик',
 }
 
 const currentPageTitle = computed(() => {
