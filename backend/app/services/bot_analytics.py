@@ -28,4 +28,35 @@ class BotAnalyticsService:
             "district_name": district.name,
             "total_organizations": org_count,
             "message": f"В районе {district.name} зарегистрировано {org_count} подведомственных организаций."
+            
         }
+    async def find_similar_organizations(self, org_name: str) -> dict:
+        """
+        Универсальный метод поиска двойников.
+        org_name приходит от GigaChat'а динамически.
+        """
+        try:
+            # 1. Ищем саму организацию в БД (через ilike, чтобы искать по подстроке)
+            query = select(Organization).where(Organization.name.ilike(f"%{org_name}%")).limit(1)
+            result = await self.db.execute(query)
+            target_org = result.scalar_one_or_none()
+
+            if not target_org:
+                return {"error": f"Организация с названием, похожим на '{org_name}', не найдена в базе."}
+
+            # 2. Вызываем твой ML-сервис k-NN для поиска двойников 
+            # (предположим, у тебя есть функция get_knn_twins(org_id))
+            # twins = await ml_service.get_knn_twins(target_org.id, k=3)
+            
+            # Для примера формируем структуру ответа:
+            return {
+                "target_organization": target_org.name,
+                "category": target_org.category,
+                "twins_found": [
+                    # Сюда подставишь реальные данные из БД / k-NN
+                    {"name": "Пример двойника 1", "similarity_score": "95%", "plan_amount": 500000},
+                    {"name": "Пример двойника 2", "similarity_score": "88%", "plan_amount": 480000}
+                ]
+            }
+        except Exception as e:
+            return {"error": f"Ошибка при расчете: {str(e)}"}

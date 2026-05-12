@@ -46,12 +46,12 @@
 
           <v-expand-transition>
             <div v-if="result">
-              <v-card v-if="result.status === 'success'" class="mt-6 pa-5 bg-green-lighten-5 border rounded-lg" elevation="0" style="border-color: #2E7D32 !important;">
+              <v-card v-if="result.status === 'success' && (!result.errors || result.errors.length === 0)" class="mt-6 pa-5 bg-green-lighten-5 border rounded-lg" elevation="0" style="border-color: #2E7D32 !important;">
                 <div class="d-flex align-center mb-4">
                   <v-icon color="success" size="36" class="mr-3">mdi-check-circle</v-icon>
                   <div>
                     <div class="text-h6 text-success font-weight-bold">Файл успешно загружен</div>
-                    <div class="text-caption text-grey-darken-3">Система обработала и сохранила данные без критических ошибок.</div>
+                    <div class="text-caption text-grey-darken-3">Система обработала и сохранила данные без ошибок.</div>
                   </div>
                   <v-spacer></v-spacer>
                   <v-btn icon size="small" variant="text" @click="result = null"><v-icon>mdi-close</v-icon></v-btn>
@@ -61,7 +61,38 @@
                     Обработано записей: {{ result.records }}
                   </v-chip>
                   <v-chip color="#1B3A5C" variant="tonal" size="small">Новые / Обновлены</v-chip>
-                  <v-chip v-if="result.errors" color="error" variant="tonal" size="small">Ошибок: {{ result.errors }}</v-chip>
+                </div>
+              </v-card>
+
+              <v-card v-else-if="result.status === 'success' && result.errors && result.errors.length > 0" class="mt-6 pa-5 bg-red-lighten-5 border rounded-lg" elevation="0" style="border-color: #D32F2F !important;">
+                <div class="d-flex align-start mb-4">
+                  <v-icon color="error" size="36" class="mr-3 mt-1">mdi-alert-circle</v-icon>
+                  <div class="w-100">
+                    <div class="d-flex justify-space-between align-center mb-1">
+                      <div class="text-h6 text-error font-weight-bold">В файле найдены ошибки</div>
+                      <v-btn icon size="small" variant="text" @click="result = null"><v-icon>mdi-close</v-icon></v-btn>
+                    </div>
+                    <div class="text-caption text-grey-darken-3 mb-3">
+                      Успешно загружено записей: {{ result.records }}. Пожалуйста, исправьте следующие строки и загрузите их заново:
+                    </div>
+                    
+                    <v-table density="compact" class="bg-transparent text-caption border rounded">
+                      <thead class="bg-red-lighten-4">
+                        <tr>
+                          <th class="text-left font-weight-bold text-black">Строка</th>
+                          <th class="text-left font-weight-bold text-black">Организация</th>
+                          <th class="text-left font-weight-bold text-black">Описание проблемы</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="(err, idx) in result.errors" :key="idx">
+                          <td class="font-weight-bold">{{ err.row }}</td>
+                          <td>{{ err.organization || '—' }}</td>
+                          <td class="text-red-darken-2">{{ Array.isArray(err.issues) ? err.issues.join(', ') : err.issues || err }}</td>
+                        </tr>
+                      </tbody>
+                    </v-table>
+                  </div>
                 </div>
               </v-card>
 
@@ -69,7 +100,7 @@
                 <div class="d-flex align-center">
                   <v-icon color="error" size="36" class="mr-3">mdi-alert-circle</v-icon>
                   <div>
-                    <div class="text-h6 text-error font-weight-bold">Ошибка обработки файла</div>
+                    <div class="text-h6 text-error font-weight-bold">Критическая ошибка файла</div>
                     <div class="text-caption text-grey-darken-3">{{ result.detail }}</div>
                   </div>
                   <v-spacer></v-spacer>
@@ -145,7 +176,11 @@ async function uploadFile() {
   result.value = null
   try {
     const { data } = await reportsAPI.upload(file.value, reportType.value, selectedYear.value)
-    result.value = { status: 'success', records: data.records_processed || data.records || 0, errors: data.errors || 0 }
+    result.value = { 
+      status: 'success', 
+      records: data.records_processed || data.records || 0, 
+      errors: data.errors || [] // Теперь это всегда массив
+    }
     file.value = null
   } catch (e) {
     result.value = { status: 'error', detail: e.response?.data?.detail || 'Произошла системная ошибка при парсинге файла' }
@@ -207,13 +242,11 @@ function showError(msg) {
   border-color: #1B3A5C;
 }
 
-/* При перетаскивании: сплошная зеленая граница и зеленый фон */
 .upload-dropzone--active {
   border: 2px solid #2E7D32 !important;
   background-color: rgba(46, 125, 50, 0.05) !important;
 }
 
-/* Анимация прыгающего облака при Drag-n-drop */
 .upload-dropzone--active .upload-icon {
   animation: bounceCloud 1s infinite;
 }

@@ -66,7 +66,7 @@ class Settings(BaseSettings):
         case_sensitive=True,
         env_ignore_empty=True,
         extra="ignore"
-    )
+)
     
     GIGACHAT_AUTH_KEY: str | None = None
     GIGACHAT_SCOPE: str = "GIGACHAT_API_PERS"

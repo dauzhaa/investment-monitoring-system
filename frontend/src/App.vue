@@ -148,6 +148,7 @@ const snackbar = ref(false)
 const snackbarText = ref('')
 const snackbarColor = ref('success')
 
+// УБРАН АНАЛИТИЧЕСКИЙ ЦЕНТР
 const adminNav = [
   { to: '/', icon: 'mdi-view-dashboard-outline', title: 'Главная' },
   { to: '/monitoring', icon: 'mdi-clipboard-check-outline', title: 'Мониторинг сдачи' },
@@ -155,7 +156,6 @@ const adminNav = [
   { to: '/upload', icon: 'mdi-cloud-upload-outline', title: 'Загрузка данных' },
   { to: '/debtors', icon: 'mdi-account-alert-outline', title: 'Реестр должников' },
   { to: '/ipo-analytics', icon: 'mdi-radar', title: 'ИПО' },
-  { to: '/analytics-center', icon: 'mdi-chart-tree', title: 'Аналитический центр' }, // Убедись, что этот пункт тоже здесь!
   { to: '/assistant', icon: 'mdi-robot-outline', title: 'AI-Аналитик' },
 ]
 
@@ -165,6 +165,7 @@ const orgNav = [
 
 const navItems = computed(() => authStore.isOrganization ? orgNav : adminNav)
 
+// УБРАН АНАЛИТИЧЕСКИЙ ЦЕНТР
 const pageTitles = {
   '/': 'Главная',
   '/monitoring': 'Мониторинг сдачи отчётности',
@@ -174,7 +175,6 @@ const pageTitles = {
   '/profile': 'Профиль и Аудит',
   '/debtors': 'Контроль сроков (Должники)',
   '/ipo-analytics': 'ИПО',
-  '/analytics-center': 'Аналитический центр', // И заголовок для новой страницы
   '/assistant': 'AI-Аналитик',
 }
 
