@@ -12,6 +12,7 @@ from app.models.directories import District
 from app.models.report_submission import ReportSubmission
 from app.models.uploaded_file import UploadedFile
 from app.services.ipo_calculator import IPOCalculator
+from app.models.organization_ipo import OrganizationIPO
 
 router = APIRouter()
 
@@ -208,14 +209,19 @@ async def get_ipo_analytics(
     )
     plans = dict(plan_res.all())
 
-    # 3. Собираем Ошибки качества
-    errors_res = await db.execute(
-        select(UploadedFile.organization_id, func.count(UploadedFile.id))
-        .where(UploadedFile.organization_id.in_(org_ids), UploadedFile.year == year, UploadedFile.processing_status == 'error')
-        .group_by(UploadedFile.organization_id)
+    # 3. Загружаем закэшированные ИПО из organization_ipo
+    ipo_cache_res = await db.execute(
+        select(
+            OrganizationIPO.organization_id,
+            OrganizationIPO.ipo_score,
+            OrganizationIPO.d_score,
+            OrganizationIPO.a_score,
+            OrganizationIPO.e_score,
+        )
+        .where(OrganizationIPO.organization_id.in_(org_ids), OrganizationIPO.year == year)
     )
-    errors = dict(errors_res.all())
-
+    ipo_cache = {row.organization_id: row for row in ipo_cache_res.all()}
+    
     # 4. Собираем Сдачи отчетов
     subm_res = await db.execute(
         select(ReportSubmission.organization_id, ReportSubmission.quarter, ReportSubmission.status, ReportSubmission.days_overdue)
@@ -231,17 +237,16 @@ async def get_ipo_analytics(
 
     # 5. Календарь сдачи отчетов (Группировка по датам)
     cal_stmt = select(
-        ReportSubmission.submitted_date.label("date"), # <-- ИСПРАВЛЕНО ЗДЕСЬ
+        ReportSubmission.submitted_date.label("date"),
         func.count(ReportSubmission.id).label("count")
     ).where(
-        ReportSubmission.submitted_date.isnot(None)    # <-- И ИСПРАВЛЕНО ЗДЕСЬ
+        ReportSubmission.submitted_date.isnot(None)
     ).group_by("date")
         
     cal_res = await db.execute(cal_stmt)
     calendar_data = [[str(r.date), r.count] for r in cal_res.all()]
 
     # --- РАСЧЕТ ИПО ДЛЯ ДАШБОРДА ---
-    current_quarter = get_current_quarter(year)
     total_plan, total_fact, total_fact_ontime = 0, 0, 0
     scatter_data, orgs_ipo = [], []
     sum_rho, sum_alpha, sum_beta, sum_ipo, valid_count = 0, 0, 0, 0, 0
@@ -250,12 +255,11 @@ async def get_ipo_analytics(
     dist_stats = {}
 
     for org, dist_name in orgs_rows:
-        # ИЗМЕНЕНО: Явно помечаем проблемные организации
         if not dist_name or dist_name == "Не распределено":
             dist_name = "⚠ Без района"
             
         if dist_name not in dist_stats:
-            dist_stats[dist_name] = { # ... дальше твой код
+            dist_stats[dist_name] = {
                 'count': 0, 'rho': 0, 'alpha': 0, 'beta': 0, 
                 'fact': 0, 'plan': 0, 'ontime_reports': 0, 'total_reports': 0,
                 'statuses': {'Образцовые': 0, 'Безалаберные': 0, 'Слабые': 0, 'Проблемные': 0}
@@ -265,48 +269,49 @@ async def get_ipo_analytics(
         plan_val = float(plans.get(org.id, 0))
         org_subs = submissions.get(org.id, [])
         
-        ipo_data = IPOCalculator.calculate(
-            is_smp=org.is_smp, year=year, current_quarter=current_quarter,
-            submissions=org_subs, errors_count=errors.get(org.id, 0),
-            fact_amount=fact_val, plan_amount=plan_val
-        )
+        cached = ipo_cache.get(org.id)
+        if not cached:
+            continue  # нет в кэше — пропускаем
 
-        if ipo_data["ipo"] != "-":
-            total_plan += plan_val
-            total_fact += fact_val
-            
-            is_ontime = len(org_subs) > 0 and all(s['days_overdue'] == 0 for s in org_subs)
-            if is_ontime:
-                total_fact_ontime += fact_val
+        rho = float(cached.d_score)
+        alpha = float(cached.a_score)
+        beta = float(cached.e_score) if cached.e_score is not None else 0
+        ipo_val = float(cached.ipo_score)
 
-            rho = ipo_data["details"]["discipline"]
-            alpha = ipo_data["details"]["quality"]
-            beta = ipo_data["details"]["execution"] or 0
-            ipo_val = float(ipo_data["ipo"])
+        # для воронки "Сдано вовремя"
+        is_ontime = len(org_subs) > 0 and all(s['days_overdue'] == 0 for s in org_subs)
 
-            # Глобальная статистика
-            sum_rho += rho; sum_alpha += alpha; sum_beta += beta; sum_ipo += ipo_val
-            valid_count += 1
+        total_plan += plan_val
+        total_fact += fact_val
+        if is_ontime:
+            total_fact_ontime += fact_val
 
-            cat_name = "ВУЗ" if "ВУЗ" in org.name else "МО" if "МАОУ" in org.name or "МБДОУ" in org.name else "Подвед"
-            scatter_data.append([rho, beta, fact_val / 1000, org.name, cat_name])
-            orgs_ipo.append({"name": org.name, "ipo": ipo_val})
+        # Глобальная статистика
+        sum_rho += rho
+        sum_alpha += alpha
+        sum_beta += beta
+        sum_ipo += ipo_val
+        valid_count += 1
 
-            # Статистика по районам
-            dist_stats[dist_name]['count'] += 1
-            dist_stats[dist_name]['rho'] += rho
-            dist_stats[dist_name]['alpha'] += alpha
-            dist_stats[dist_name]['beta'] += beta
-            dist_stats[dist_name]['fact'] += fact_val
-            dist_stats[dist_name]['plan'] += plan_val
-            dist_stats[dist_name]['total_reports'] += len(org_subs)
-            dist_stats[dist_name]['ontime_reports'] += sum(1 for s in org_subs if s['days_overdue'] == 0)
+        cat_name = "ВУЗ" if "ВУЗ" in org.name else "МО" if "МАОУ" in org.name or "МБДОУ" in org.name else "Подвед"
+        scatter_data.append([rho, beta, fact_val / 1000, org.name, cat_name])
+        orgs_ipo.append({"name": org.name, "ipo": ipo_val})
 
-            # Определение статуса (матрица 2x2)
-            if rho >= 50 and beta >= 50: dist_stats[dist_name]['statuses']['Образцовые'] += 1
-            elif rho < 50 and beta >= 50: dist_stats[dist_name]['statuses']['Безалаберные'] += 1
-            elif rho >= 50 and beta < 50: dist_stats[dist_name]['statuses']['Слабые'] += 1
-            else: dist_stats[dist_name]['statuses']['Проблемные'] += 1
+        # Статистика по районам
+        dist_stats[dist_name]['count'] += 1
+        dist_stats[dist_name]['rho'] += rho
+        dist_stats[dist_name]['alpha'] += alpha
+        dist_stats[dist_name]['beta'] += beta
+        dist_stats[dist_name]['fact'] += fact_val
+        dist_stats[dist_name]['plan'] += plan_val
+        dist_stats[dist_name]['total_reports'] += len(org_subs)
+        dist_stats[dist_name]['ontime_reports'] += sum(1 for s in org_subs if s['days_overdue'] == 0)
+
+        # Определение статуса (матрица 2x2)
+        if rho >= 50 and beta >= 50: dist_stats[dist_name]['statuses']['Образцовые'] += 1
+        elif rho < 50 and beta >= 50: dist_stats[dist_name]['statuses']['Безалаберные'] += 1
+        elif rho >= 50 and beta < 50: dist_stats[dist_name]['statuses']['Слабые'] += 1
+        else: dist_stats[dist_name]['statuses']['Проблемные'] += 1
 
     orgs_ipo.sort(key=lambda x: x["ipo"], reverse=True)
     avg_rho = round(sum_rho / valid_count, 1) if valid_count else 0
@@ -373,7 +378,7 @@ async def get_ipo_analytics(
         "calendar": calendar_data,
         "line": {
             "xAxis": ['Q1 2024', 'Q2 2024', 'Q3 2024', 'Q4 2024'],
-            "seriesData": [max(0, avg_ipo - 5), avg_ipo, min(100, avg_ipo + 3), avg_ipo], # Тренд (можно заменить на реальную историю)
+            "seriesData": [max(0, avg_ipo - 5), avg_ipo, min(100, avg_ipo + 3), avg_ipo],
             "avgData": [70, 72, 74, 75]
         }
     }

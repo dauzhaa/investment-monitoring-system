@@ -1,4 +1,5 @@
 import asyncio
+import openpyxl
 from sqlalchemy import select
 from app.core.database import AsyncSessionLocal
 from app.models.organization import Organization
@@ -8,15 +9,44 @@ from app.models.report_submission import ReportSubmission
 from app.models.organization_ipo import OrganizationIPO
 from app.services.ipo_calculator import IPOCalculator
 
-async def calculate_and_cache_ipo(year: int = 2024):
+async def calculate_and_cache_ipo(year: int = 2024, excel_path: str = '/app/data.xlsx'):
+    # 1. ДОБАВЛЕНО: Считываем количество ошибок валидации из нового Excel-файла
+    errors_map = {}
+    try:
+        # data_only=True позволяет считывать результаты формул (если они есть)
+        wb = openpyxl.load_workbook(excel_path, data_only=True)
+        ws = wb.active
+        headers = [cell.value for cell in ws[1]]
+        
+        for row_data in ws.iter_rows(min_row=2, values_only=True):
+            if not row_data[0]:
+                continue
+            row = dict(zip(headers, row_data))
+            inn = str(row.get('ИНН', '')).strip()
+            
+            # Безопасно достаем количество ошибок
+            errors_raw = row.get('Ошибок валидации')
+            try:
+                errors = int(float(errors_raw)) if errors_raw is not None else 0
+            except (ValueError, TypeError):
+                errors = 0
+            
+            if inn:
+                errors_map[inn] = errors
+                
+        print(f"📊 Успешно загружена статистика ошибок для {len(errors_map)} организаций из Excel.")
+    except FileNotFoundError:
+        print(f"⚠️ Файл {excel_path} не найден. Все ошибки будут равны 0.")
+    except Exception as e:
+        print(f"⚠️ Не удалось прочитать данные об ошибках из {excel_path}: {e}")
+
+    # 2. Основной цикл работы с БД
     db = AsyncSessionLocal()
     try:
-        # 1. Получаем все организации
         orgs = (await db.execute(select(Organization))).scalars().all()
         count = 0
         
         for org in orgs:
-            # 2. Собираем данные по сдачам отчетов
             subs = (await db.execute(
                 select(ReportSubmission)
                 .where(ReportSubmission.organization_id == org.id, ReportSubmission.year == year)
@@ -26,7 +56,6 @@ async def calculate_and_cache_ipo(year: int = 2024):
                 for s in subs
             ]
             
-# 3. Собираем план (берем первый найденный, если их случайно несколько)
             forecast = (await db.execute(
                 select(InvestmentForecast)
                 .where(
@@ -34,23 +63,25 @@ async def calculate_and_cache_ipo(year: int = 2024):
                     InvestmentForecast.year == year, 
                     InvestmentForecast.forecast_type == 'первоначальный'
                 )
-            )).scalars().first()  # <--- ИЗМЕНЕНИЕ ЗДЕСЬ
+            )).scalars().first()
             plan_amount = float(forecast.forecast_amount) if forecast and forecast.forecast_amount else 0.0
             
-            # 4. Собираем факт (если фактов несколько, пока берем первый)
             fact = (await db.execute(
                 select(InvestmentFact)
                 .where(InvestmentFact.organization_id == org.id, InvestmentFact.year == year)
-            )).scalars().first()  # <--- ИЗМЕНЕНИЕ ЗДЕСЬ
+            )).scalars().first()
             fact_amount = float(fact.amount) if fact and fact.amount else 0.0
             
-            # 5. Считаем ИПО за 4 квартал (конец года)
+            # 3. ДОБАВЛЕНО: Достаем реальное количество ошибок валидации для этой организации
+            actual_errors = errors_map.get(org.inn, 0)
+            
+            # 4. ИСПРАВЛЕНО: Передаем actual_errors в калькулятор
             ipo_result = IPOCalculator.calculate(
                 is_smp=org.is_smp,
                 year=year,
                 current_quarter=4,
                 submissions=submissions_list,
-                errors_count=0, # Для синтетики пока 0 ошибок валидации
+                errors_count=actual_errors,  # <--- Теперь тут не 0!
                 fact_amount=fact_amount,
                 plan_amount=plan_amount
             )
@@ -58,7 +89,6 @@ async def calculate_and_cache_ipo(year: int = 2024):
             if ipo_result["ipo"] == "-":
                 continue
                 
-            # 6. Сохраняем или обновляем запись в БД
             existing_ipo = (await db.execute(
                 select(OrganizationIPO)
                 .where(OrganizationIPO.organization_id == org.id, OrganizationIPO.year == year)
@@ -87,9 +117,11 @@ async def calculate_and_cache_ipo(year: int = 2024):
 
     except Exception as e:
         await db.rollback()
-        print(f"❌ Ошибка: {e}")
+        print(f"❌ Ошибка БД: {e}")
     finally:
         await db.close()
 
 if __name__ == "__main__":
-    asyncio.run(calculate_and_cache_ipo(2024))
+    # Укажи тут путь к файлу. Если запускаешь локально на Mac, возможно путь будет './data.xlsx'
+    # Если в Docker - '/app/data.xlsx'
+    asyncio.run(calculate_and_cache_ipo(2024, '/app/data.xlsx'))
