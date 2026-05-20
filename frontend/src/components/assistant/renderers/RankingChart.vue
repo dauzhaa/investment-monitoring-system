@@ -11,7 +11,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import * as echarts from 'echarts'
 
 const props = defineProps({
@@ -20,11 +20,15 @@ const props = defineProps({
 const chartRef = ref(null)
 let chart = null
 
+// Функция для обновления размеров графика
+const handleResize = () => {
+  if (chart) chart.resize()
+}
+
 onMounted(() => {
   if (!chartRef.value || !props.data?.items) return
   chart = echarts.init(chartRef.value)
   
-  // Разворачиваем массив, чтобы топ-1 был сверху в горизонтальном графике
   const reversedItems = [...props.data.items].reverse()
   const names = reversedItems.map(item => item.name)
   const values = reversedItems.map(item => item.ipo)
@@ -40,9 +44,13 @@ onMounted(() => {
       label: { show: true, position: 'right', formatter: '{c}', fontWeight: 'bold' }
     }]
   })
+
+  // Слушаем изменение размера окна
+  window.addEventListener('resize', handleResize)
 })
 
 onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
   chart?.dispose()
 })
 </script>

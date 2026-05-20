@@ -56,8 +56,10 @@ class GigaChatService:
         message = data["choices"][0]["message"]
         messages.append(message)
         
-        # Шаг 2: Если нейросеть решила вызвать функцию
+# Шаг 2: Если нейросеть решила вызвать функцию
         if message.get("tool_calls"):
+            executed_tools = [] # <-- ДОБАВЛЯЕМ МАССИВ ДЛЯ ФРОНТА
+            
             for tool_call in message["tool_calls"]:
                 func_name = tool_call["function"]["name"]
                 args = json.loads(tool_call["function"]["arguments"])
@@ -72,6 +74,13 @@ class GigaChatService:
                 else:
                     result = {"error": "Функция не найдена"}
                 
+                # Сохраняем для отправки на фронт
+                executed_tools.append({
+                    "name": func_name,
+                    "arguments": args,
+                    "result": result
+                })
+                
                 # Возвращаем результат обратно нейросети
                 messages.append({
                     "role": "tool",
@@ -79,21 +88,16 @@ class GigaChatService:
                     "content": json.dumps(result, ensure_ascii=False)
                 })
                 
-            # Шаг 3: Просим нейросеть сделать финальный вывод на основе полученных данных
-            final_response = await self._client.post(
-                self.API_URL,
-                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-                json={
-                    "model": settings.GIGACHAT_MODEL,
-                    "messages": messages,
-                    "temperature": 0.2
-                }
-            )
+            # Шаг 3: Финальный вывод
+            final_response = await self._client.post(...)
             final_data = final_response.json()
             total_tokens += final_data["usage"]["total_tokens"]
-            return {"text": final_data["choices"][0]["message"]["content"], "tokens": total_tokens}
             
-        # Если вызов функции не потребовался (обычный ответ)
-        return {"text": message["content"], "tokens": total_tokens}
+            # ВОЗВРАЩАЕМ ВМЕСТЕ С TOOL_CALLS
+            return {
+                "text": final_data["choices"][0]["message"]["content"], 
+                "tokens": total_tokens,
+                "tool_calls": executed_tools 
+            }
 
 gigachat = GigaChatService()
