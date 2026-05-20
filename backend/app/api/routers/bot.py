@@ -28,7 +28,15 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     
     try:
         result = await gigachat.chat_with_tools(full_messages, TOOLS, analytics)
-        return {"answer": result["text"]}
+        
+        # Формируем безопасный ответ для фронтенда
+        response_data = {"answer": result["text"]}
+        
+        # ЕСЛИ БЫЛИ ВЫЗОВЫ ФУНКЦИЙ — ОТДАЕМ ИХ НА КЛИЕНТ
+        if "tool_calls" in result:
+            response_data["tool_calls"] = result["tool_calls"]
+            
+        return response_data
     except Exception as e:
         print(f"Ошибка бота: {e}")
         raise HTTPException(status_code=500, detail="Ошибка при обращении к ИИ")

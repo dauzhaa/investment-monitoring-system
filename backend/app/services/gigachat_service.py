@@ -52,17 +52,28 @@ class GigaChatService:
         )
         response.raise_for_status()
         data = response.json()
-        total_tokens += data["usage"]["total_tokens"]
+        
+        # БЕЗОПАСНОЕ ИЗВЛЕЧЕНИЕ ТОКЕНОВ (GigaChat может отдавать usage=null)
+        if data.get("usage"):
+            total_tokens += data["usage"].get("total_tokens", 0)
+            
         message = data["choices"][0]["message"]
         messages.append(message)
         
-# Шаг 2: Если нейросеть решила вызвать функцию
+        # Шаг 2: Если нейросеть решила вызвать функцию
         if message.get("tool_calls"):
-            executed_tools = [] # <-- ДОБАВЛЯЕМ МАССИВ ДЛЯ ФРОНТА
+            executed_tools = []
             
             for tool_call in message["tool_calls"]:
-                func_name = tool_call["function"]["name"]
-                args = json.loads(tool_call["function"]["arguments"])
+                # Безопасно парсим название и аргументы
+                func_obj = tool_call.get("function", {})
+                func_name = func_obj.get("name")
+                raw_args = func_obj.get("arguments", "{}")
+                
+                try:
+                    args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+                except Exception:
+                    args = {}
                 
                 # Вызываем нашу функцию из БД
                 func = getattr(analytics_service, func_name, None)
@@ -74,7 +85,7 @@ class GigaChatService:
                 else:
                     result = {"error": "Функция не найдена"}
                 
-                # Сохраняем для отправки на фронт
+                # Сохраняем для фронтенда
                 executed_tools.append({
                     "name": func_name,
                     "arguments": args,
@@ -83,21 +94,38 @@ class GigaChatService:
                 
                 # Возвращаем результат обратно нейросети
                 messages.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call["id"],
+                    "role": "tool", # Указываем, что это ответ от инструмента
+                    "tool_call_id": tool_call.get("id", ""),
                     "content": json.dumps(result, ensure_ascii=False)
                 })
                 
-            # Шаг 3: Финальный вывод
-            final_response = await self._client.post(...)
-            final_data = final_response.json()
-            total_tokens += final_data["usage"]["total_tokens"]
+            # Шаг 3: Просим нейросеть сделать финальный вывод
+            final_response = await self._client.post(
+                self.API_URL,
+                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                json={
+                    "model": settings.GIGACHAT_MODEL,
+                    "messages": messages,
+                    "temperature": 0.2
+                }
+            )
             
-            # ВОЗВРАЩАЕМ ВМЕСТЕ С TOOL_CALLS
+            # ВАЖНО: Ловим ошибки, если GigaChat отклонил наш JSON на Шаге 3
+            if not final_response.is_success:
+                print(f"Ошибка GigaChat (Шаг 3): {final_response.text}")
+            final_response.raise_for_status()
+            
+            final_data = final_response.json()
+            if final_data.get("usage"):
+                total_tokens += final_data["usage"].get("total_tokens", 0)
+                
             return {
                 "text": final_data["choices"][0]["message"]["content"], 
                 "tokens": total_tokens,
-                "tool_calls": executed_tools 
+                "tool_calls": executed_tools # Прокидываем наружу!
             }
+            
+        # Если вызов функции не потребовался (обычный ответ)
+        return {"text": message.get("content", ""), "tokens": total_tokens}
 
 gigachat = GigaChatService()
