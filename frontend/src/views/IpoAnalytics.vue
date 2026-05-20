@@ -347,7 +347,7 @@ const initScatter2x2 = () => {
         label: { position: 'insideTopLeft', color: '#000', opacity: 0.5, fontSize: 14, fontWeight: 'bold' },
         data: [
           [{ xAxis: 50, yAxis: 50, itemStyle: { color: 'rgba(56, 142, 60, 0.1)' }, name: 'Образцовые' }, { xAxis: 100, yAxis: 100 }],
-          [{ xAxis: 0, yAxis: 50, itemStyle: { color: 'rgba(245, 124, 0, 0.1)' }, name: 'Безалаберные' }, { xAxis: 50, yAxis: 100 }],
+          [{ xAxis: 0, yAxis: 50, itemStyle: { color: 'rgba(245, 124, 0, 0.1)' }, name: 'Непунктуальные' }, { xAxis: 50, yAxis: 100 }],
           [{ xAxis: 50, yAxis: 0, itemStyle: { color: 'rgba(251, 192, 45, 0.1)' }, name: 'Слабые в освоении' }, { xAxis: 100, yAxis: 50 }],
           [{ xAxis: 0, yAxis: 0, itemStyle: { color: 'rgba(211, 47, 47, 0.1)' }, name: 'Проблемные' }, { xAxis: 50, yAxis: 50 }]
         ]
