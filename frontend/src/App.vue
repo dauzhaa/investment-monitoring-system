@@ -277,30 +277,76 @@ onMounted(() => {
 
 * { font-family: var(--font-body) !important; }
 
-.sidebar-brand { display: flex; align-items: center; gap: 12px; padding: 20px 16px 16px; min-height: 68px; }
-.sidebar-brand--rail { justify-content: center; padding: 20px 8px 16px; }
-.brand-icon { width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, #1B3A5C, #2E7D32); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.brand-title { color: white; font-size: 15px; font-weight: 700; letter-spacing: 0.5px; line-height: 1.2; }
-.brand-subtitle { color: rgba(255, 255, 255, 0.6); font-size: 11px; font-weight: 400; margin-top: 2px; }
-.nav-item { color: rgba(255, 255, 255, 0.65) !important; font-size: 13.5px !important; font-weight: 500 !important; transition: all 0.2s ease; min-height: 44px; }
+.sidebar-brand { 
+  display: flex; 
+  align-items: center; 
+  gap: 12px; 
+  padding: 20px 16px 16px; 
+  min-height: 76px; /* Чуть увеличили для крупного текста */
+  overflow: hidden; /* Защита от вылезания контента */
+}
+
+.brand-title { 
+  color: white; 
+  font-size: 20px; /* Увеличили с 15px */
+  font-weight: 700; 
+  letter-spacing: 0.5px; 
+  line-height: 1.2; 
+  white-space: nowrap; 
+  overflow: hidden; 
+  text-overflow: ellipsis; /* Добавили троеточие, если не влезет */
+}
+
+.brand-subtitle { 
+  color: rgba(255, 255, 255, 0.6); 
+  font-size: 14px; /* Увеличили с 11px */
+  font-weight: 400; 
+  margin-top: 4px; 
+  white-space: nowrap; 
+  overflow: hidden; 
+  text-overflow: ellipsis; /* Защита длинного названия Департамента */
+}
+
+/* Стилизация самих кнопок меню */
+.nav-item { 
+  color: rgba(255, 255, 255, 0.65) !important; 
+  font-weight: 500 !important; 
+  transition: all 0.2s ease; 
+  min-height: 52px; /* Увеличили с 44px для комфортного клика */
+  margin-bottom: 6px !important;
+}
+
+/* Vuetify 3 прячет текст внутри этого класса, поэтому обращаемся к нему напрямую */
+.nav-item .v-list-item-title {
+  font-size: 16px !important; /* Увеличили с 13.5px */
+  line-height: 1.4;
+}
+
+/* Иконки тоже стоит сделать пропорционально больше */
+.nav-item .v-icon {
+  font-size: 24px !important;
+}
+
 .nav-item:hover { background: var(--sidebar-hover) !important; color: white !important; }
 .nav-item--active { background: var(--sidebar-active) !important; color: #4CAF50 !important; }
 .nav-item--active .v-icon { color: #4CAF50 !important; }
-.sidebar-user { display: flex; align-items: center; gap: 10px; padding: 12px 16px; }
-.sidebar-user--rail { justify-content: center; padding: 12px 8px; }
-.user-email { color: rgba(255, 255, 255, 0.8); font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; }
-.user-role { color: rgba(255, 255, 255, 0.4); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
-.sidebar-actions { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px 16px; }
-.sidebar-actions--rail { flex-direction: column; gap: 4px; padding: 8px 4px 16px; }
-.app-topbar { z-index: 900 !important; }
-.topbar-title { font-size: 18px !important; font-weight: 600 !important; color: var(--text-primary) !important; }
-.main-content { min-height: 100vh; }
-.content-wrapper { padding: 24px; max-width: 1600px; margin: 0 auto; }
-.page-enter-active, .page-leave-active { transition: opacity 0.25s ease, transform 0.25s ease; }
-.page-enter-from { opacity: 0; transform: translateX(15px); }
-.page-leave-to { opacity: 0; transform: translateX(-15px); }
-.fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
-.fade-enter-from, .fade-leave-to { opacity: 0; }
-.stat-card { border-radius: 12px !important; border: 1px solid rgba(0,0,0,0.05) !important; transition: box-shadow 0.3s ease, transform 0.3s ease; }
-.stat-card:hover { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08) !important; transform: translateY(-2px); }
+
+/* Блок пользователя внизу */
+.user-email { 
+  color: rgba(255, 255, 255, 0.8); 
+  font-size: 15px; /* Увеличили с 12px */
+  font-weight: 500; 
+  white-space: nowrap; 
+  overflow: hidden; 
+  text-overflow: ellipsis; 
+  max-width: 150px; /* Жестко ограничили ширину под троеточие */
+}
+
+.user-role { 
+  color: rgba(255, 255, 255, 0.4); 
+  font-size: 12px; /* Увеличили с 11px */
+  text-transform: uppercase; 
+  letter-spacing: 0.5px; 
+  margin-top: 2px;
+}
 </style>
