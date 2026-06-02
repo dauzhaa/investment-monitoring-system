@@ -31,8 +31,8 @@
             <thead class="bg-grey-lighten-4">
               <tr>
                 <th class="text-left font-weight-bold">Организация</th>
-                <th class="text-right font-weight-bold">Дисциплина</th>
-                <th class="text-right font-weight-bold">Исполнение</th>
+                <th class="text-right font-weight-bold">Дисциплина %</th>
+                <th class="text-right font-weight-bold">Исполнение %</th>
               </tr>
             </thead>
             <tbody>
@@ -201,7 +201,13 @@ const fetchData = async () => {
 
     if (data.funnel && charts.value.funnel) {
       const funnelColors = ['#1976D2', '#FFB300', '#4CAF50']
-      const formattedFunnel = data.funnel.map((item, idx) => ({ ...item, itemStyle: { color: funnelColors[idx] } }))
+      const funnelNames = ['План', 'Факт', 'Отчёт'] // Жестко задаем правильные названия
+      
+      const formattedFunnel = data.funnel.map((item, idx) => ({ 
+        ...item, 
+        name: funnelNames[idx] || item.name, // Подменяем имя
+        itemStyle: { color: funnelColors[idx] } 
+      }))
       charts.value.funnel.setOption({ series: [{ data: formattedFunnel }] })
     }
 
@@ -314,7 +320,7 @@ const initLineChart = () => {
     yAxis: { type: 'value', min: 40, max: 100 },
     series: [
       { name: 'Выбранный срез', type: 'bar', data: [], barWidth: '40%', itemStyle: { color: '#1976D2', borderRadius: [4, 4, 0, 0] } },
-      { name: 'Регион (Ожидание / Среднее)', type: 'line', data: [], smooth: true, lineStyle: { type: 'dashed', color: '#FF5722', width: 2 }, symbol: 'none' }
+      { name: 'Регион (Ожидание / Среднее)', type: 'line', data: [], smooth: false, lineStyle: { type: 'dashed', color: '#FF5722', width: 2 }, symbol: 'none' }
     ]
   })
   return chart
@@ -407,23 +413,25 @@ const initHeatmap = () => {
   chart.setOption({
     tooltip: { position: 'top', formatter: (p) => `<b>${chart.getOption().yAxis[0].data[p.data[1]]}</b><br/>${p.name}: <b>${p.data[2]}</b>` },
     grid: { left: 180, right: 40, top: 50, bottom: 80 },
-    // ИЗМЕНЕНО: Заголовок "Организации" полностью
-    xAxis: { type: 'category', data: ['Дисциплина (ρ)', 'Качество (α)', 'Исполнение (β)', '% вовремя', '% плана', 'Организации'], position: 'top', axisLabel: { interval: 0, fontSize: 12 }, splitArea: { show: true } },
+    
+    // ДОБАВЛЕНЫ значки % в названия столбцов
+    xAxis: { type: 'category', data: ['Дисциплина (ρ), %', 'Качество (α), %', 'Исполнение (β), %', '% вовремя', '% плана', 'Организации'], position: 'top', axisLabel: { interval: 0, fontSize: 12 }, splitArea: { show: true } },
     yAxis: { type: 'category', data: [], inverse: true, axisLabel: { interval: 0, fontSize: 11, width: 170, overflow: 'truncate' }, splitArea: { show: true } },
     
     visualMap: {
-      seriesIndex: 0, // ИЗМЕНЕНО: Применяется только к процентам, игнорируя столбец Организаций
+      seriesIndex: 0,
       type: 'piecewise',
       orient: 'horizontal', left: 'center', bottom: 0,
       itemWidth: 15,
+      // ИСПРАВЛЕНЫ ОТТЕНКИ на более логичный и красивый градиент
       pieces: [
-        { min: 80, max: 100, label: '80-100% (Отлично)', color: '#4CAF50' },
-        { min: 60, max: 80, label: '60-80% (Хорошо)', color: '#C8E6C9' },
-        { min: 40, max: 60, label: '40-60% (Риск)', color: '#FFF59D' },
-        { min: 0, max: 40, label: '0-40% (Критично)', color: '#FFEBEE' }
+        { min: 80, max: 100, label: '80-100% (Отлично)', color: '#2E7D32' }, // Темно-зеленый
+        { min: 60, max: 80, label: '60-80% (Хорошо)', color: '#81C784' },    // Светло-зеленый
+        { min: 40, max: 60, label: '40-60% (Риск)', color: '#FBC02D' },      // Желтый
+        { min: 0, max: 40, label: '0-40% (Критично)', color: '#D32F2F' }     // Красный
       ]
     },
-    series: [] // Данные заполняются в fetchData
+    series: [] 
   })
   return chart
 }

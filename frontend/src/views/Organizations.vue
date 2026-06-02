@@ -31,12 +31,12 @@
       </div>
 
       <v-btn variant="tonal" color="#1B3A5C" size="small" prepend-icon="mdi-microsoft-excel" @click="exportToExcel" :loading="exporting">
-        Экспорт в Excel
-      </v-btn>
+        Экспорт
+      </v-btn>    
     </div>
 
     <v-card v-if="viewMode === 'table'" class="stat-card">
-      <v-data-table :headers="headers" :items="organizations" :items-per-page="25" density="compact" hover class="orgs-table" @click:row="(e, { item }) => navigateToDetail(item.id)">
+      <v-data-table :headers="headers" :items="organizations" :items-per-page="25" :items-per-page-options="[{value: 10, title: '10'}, {value: 50, title: '50'}, {value: 100, title: '100'}, {value: -1, title: 'Показать все'}]"density="compact" hover class="orgs-table" @click:row="(e, { item }) => navigateToDetail(item.id)">
         <template #item.name="{ item }">
           <div class="org-name">{{ item.name }}</div>
         </template>

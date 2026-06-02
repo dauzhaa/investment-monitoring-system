@@ -72,10 +72,12 @@
       </v-card>
 
       <v-card class="pa-4">
-        <div class="text-subtitle-1 font-weight-bold mb-2">
-          Распределение ИПО по районам
+        <div class="text-h6 font-weight-bold mb-1 text-blue-darken-4">
+          Карта районов Тюменской области
         </div>
-        <!-- Контейнер для графика -->
+        <div class="text-subtitle-2 text-grey-darken-1 mb-4">
+          Распределение ИПО по районам (Box-plot)
+        </div>
         <div ref="boxplotRef" :style="{ height: chartHeight + 'px', width: '100%' }"></div>
       </v-card>
     </template>
