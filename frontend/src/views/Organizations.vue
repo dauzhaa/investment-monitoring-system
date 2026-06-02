@@ -146,12 +146,19 @@ async function loadOrgs() {
     organizations.value = Array.isArray(responseData) ? responseData.map((org, i) => ({ ...org, index: i + 1 })) : []
     
   } catch (e) {
-    // ВЫВОДИМ ОШИБКУ В КОНСОЛЬ ДЛЯ ДЕБАГА
-    console.error("API Error in loadOrgs:", e.response?.data || e.message || e)
-    snackbarText.value = 'Ошибка загрузки данных: ' + (e.response?.data?.detail || 'Сервер недоступен')
+    let msg = 'Сервер недоступен'
+    if (e.code === 'ECONNABORTED') {
+      msg = 'Timeout: сервер не ответил за 30с'
+    } else if (e.response) {
+      msg = `Ошибка ${e.response.status}: ${e.response.data?.detail || 'см. консоль'}`
+    } else if (e.request) {
+      msg = 'Нет ответа (CORS / редирект 307 / сеть)'
+    }
+    console.error('API Error in loadOrgs:', e.code, e.response?.status, e)
+    snackbarText.value = msg
     snackbarColor.value = 'error'
     snackbar.value = true
-    organizations.value = [] // Защита от падения UI
+    organizations.value = []
   } finally {
     loading.value = false
   }

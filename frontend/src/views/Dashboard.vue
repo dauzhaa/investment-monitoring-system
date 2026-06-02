@@ -195,22 +195,20 @@ function formatMoney(val) {
 const areaOption = computed(() => {
   const xData = trends.value.history?.map(d => d.year) || []
   return {
-    tooltip: { trigger: 'axis', valueFormatter: (value) => formatMoney(value) + ' тыс. ₽' },
-    legend: { data: ['Факт', 'План'], top: 0, left: 'center' }, // ИЗМЕНЕНО: Легенда сверху
-    grid: { left: '2%', right: '4%', bottom: '5%', top: '15%', containLabel: true }, // ИЗМЕНЕНО: top: 15% дает место
-    xAxis: { type: 'category', boundaryGap: false, data: xData },
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, valueFormatter: (value) => formatMoney(value) + ' тыс. ₽' },
+    legend: { data: ['Факт', 'План'], top: 0, left: 'center' },
+    grid: { left: '2%', right: '4%', bottom: '5%', top: '15%', containLabel: true },
+    xAxis: { type: 'category', data: xData },
     yAxis: { type: 'value', axisLabel: { formatter: v => formatMoney(v) } },
     series: [
       {
-        name: 'Факт', type: 'line', smooth: false,
-        itemStyle: { color: '#2E7D32' },
-        areaStyle: { color: 'rgba(46, 125, 50, 0.2)' },
+        name: 'Факт', type: 'bar',
+        itemStyle: { color: '#2E7D32', borderRadius: [4, 4, 0, 0] },
         data: trends.value.history?.map(d => d.amount) || []
       },
       {
-        name: 'План', type: 'line', smooth: false,
-        itemStyle: { color: '#F57C00' },
-        lineStyle: { type: 'dashed', width: 2 },
+        name: 'План', type: 'bar',
+        itemStyle: { color: '#F57C00', borderRadius: [4, 4, 0, 0] },
         data: trends.value.history?.map(d => d.forecast) || []
       }
     ]

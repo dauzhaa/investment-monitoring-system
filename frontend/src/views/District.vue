@@ -87,11 +87,10 @@ import { useRoute } from 'vue-router';
 import VChart from 'vue-echarts';
 import { use } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
-import { LineChart } from 'echarts/charts';
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components';
 import axios from 'axios';
-
-use([CanvasRenderer, LineChart, GridComponent, TooltipComponent, LegendComponent]);
+import { BarChart } from 'echarts/charts';   // было: import { LineChart }
+use([CanvasRenderer, BarChart, GridComponent, TooltipComponent, LegendComponent]);
 
 const route = useRoute();
 
@@ -143,37 +142,24 @@ onMounted(async () => {
     historyChartOption.value = {
       tooltip: {
         trigger: 'axis',
+        axisPointer: { type: 'shadow' },
         formatter: (params) => {
           let html = `${params[0].name}<br/>`;
           params.forEach(p => {
             const color = p.seriesName === 'Факт' ? '#2E7D32' : '#F57C00';
-            const value = p.value !== null ? formatNumber(p.value) : 'Н/Д';
+            const value = (p.value !== null && p.value !== undefined) ? formatNumber(p.value) : 'Н/Д';
             html += `<span style="color:${color};font-weight:bold;">${p.seriesName}:</span> ${value} тыс. ₽<br/>`;
           });
           return html;
         }
       },
-      legend: { data: ['Факт', 'План'], top: 0, left: 'center' }, // Добавили легенду
+      legend: { data: ['Факт', 'План'], top: 0, left: 'center' },
       grid: { left: '2%', right: '4%', bottom: '5%', top: '15%', containLabel: true },
-      xAxis: { type: 'category', boundaryGap: false, data: years },
+      xAxis: { type: 'category', data: years },
       yAxis: { type: 'value', axisLabel: { formatter: (value) => formatNumber(value) } },
       series: [
-        {
-          name: 'Факт',
-          type: 'line',
-          data: factAmounts,
-          smooth: false, // ИЗМЕНЕНО: рубленая линия
-          itemStyle: { color: '#2E7D32' },
-          areaStyle: { color: 'rgba(46, 125, 50, 0.2)' }
-        },
-        {
-          name: 'План',
-          type: 'line',
-          data: planAmounts,
-          smooth: false, // ИЗМЕНЕНО: рубленая линия
-          itemStyle: { color: '#F57C00' },
-          lineStyle: { type: 'dashed', width: 2 } // План пунктиром
-        }
+        { name: 'Факт', type: 'bar', data: factAmounts, itemStyle: { color: '#2E7D32', borderRadius: [4, 4, 0, 0] } },
+        { name: 'План', type: 'bar', data: planAmounts, itemStyle: { color: '#F57C00', borderRadius: [4, 4, 0, 0] } }
       ]
     };
   } catch (error) {

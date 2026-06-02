@@ -98,7 +98,7 @@ export const analyticsAPI = {
 // ============ ORGANIZATIONS ============
 export const organizationsAPI = {
   getAll(params = {}) {
-    return api.get('/organizations', { params })
+    return api.get('/organizations/', { params })   // было '/organizations'
   },
   getById(id) {
     return api.get(`/organizations/${id}`)
