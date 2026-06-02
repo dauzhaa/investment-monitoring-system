@@ -60,7 +60,7 @@
       </v-navigation-drawer>
 
       <v-app-bar flat color="white" elevation="0" class="app-topbar" border="b">
-        <v-app-bar-title class="topbar-title">{{ currentPageTitle }}</v-app-bar-title>
+        <v-app-bar-title class="topbar-title d-flex align-center">{{ currentPageTitle }}<span class="text-caption text-grey ml-3 font-weight-medium">— Вся Тюменская область</span></v-app-bar-title>
         <v-spacer></v-spacer>
         <template #append>
           
@@ -348,5 +348,12 @@ onMounted(() => {
   text-transform: uppercase; 
   letter-spacing: 0.5px; 
   margin-top: 2px;
+}
+/* Мягкое увеличение базового шрифта во всем приложении */
+html {
+  font-size: 17px; /* По умолчанию в браузере 16px */
+}
+.v-application {
+  font-size: 1.05rem !important;
 }
 </style>

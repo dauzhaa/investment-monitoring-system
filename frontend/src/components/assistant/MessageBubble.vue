@@ -65,4 +65,21 @@ const renderedContent = computed(() => {
 .markdown-body p { margin-bottom: 8px; }
 .markdown-body ul, .markdown-body ol { margin-left: 20px; margin-bottom: 8px; }
 .markdown-body pre { background: #f5f5f5; padding: 8px; border-radius: 4px; overflow-x: auto; }
+/* Немного стилей для Markdown внутри баббла */
+.markdown-body p { margin-bottom: 8px; }
+.markdown-body ul, .markdown-body ol { margin-left: 20px; margin-bottom: 8px; }
+.markdown-body pre { background: #f5f5f5; padding: 8px; border-radius: 4px; overflow-x: auto; }
+
+/* НОВОЕ: Увеличиваем шрифт и центрируем текст бота */
+.message-bubble {
+  font-size: 1.15rem !important; /* Увеличенный шрифт */
+}
+.markdown-body {
+  text-align: center; /* Центрирование текста */
+}
+/* Если списки при центрировании выглядят криво, возвращаем им левый край: */
+.markdown-body ul, .markdown-body ol {
+  text-align: left;
+  display: inline-block;
+}
 </style>
