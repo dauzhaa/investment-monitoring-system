@@ -128,6 +128,7 @@ const getExecutionColor = (item) => {
   return '#D32F2F';
 };
 
+// Внутри District.vue, самый низ скрипта
 onMounted(async () => {
   try {
     const districtName = route.params.name;
@@ -135,26 +136,43 @@ onMounted(async () => {
     districtData.value = response.data;
 
     const years = districtData.value.history.map(h => h.year.toString());
-    const amounts = districtData.value.history.map(h => h.amount);
+    const factAmounts = districtData.value.history.map(h => h.amount);
+    // Извлекаем План (forecast). Если его нет, ставим 0 или null
+    const planAmounts = districtData.value.history.map(h => h.forecast || null); 
 
     historyChartOption.value = {
       tooltip: {
         trigger: 'axis',
         formatter: (params) => {
-          return `${params[0].name}<br/><span style="color:#2E7D32;font-weight:bold;">Факт:</span> ${formatNumber(params[0].value)} тыс. ₽`;
+          let html = `${params[0].name}<br/>`;
+          params.forEach(p => {
+            const color = p.seriesName === 'Факт' ? '#2E7D32' : '#F57C00';
+            const value = p.value !== null ? formatNumber(p.value) : 'Н/Д';
+            html += `<span style="color:${color};font-weight:bold;">${p.seriesName}:</span> ${value} тыс. ₽<br/>`;
+          });
+          return html;
         }
       },
-      grid: { left: '2%', right: '4%', bottom: '5%', top: '10%', containLabel: true },
+      legend: { data: ['Факт', 'План'], top: 0, left: 'center' }, // Добавили легенду
+      grid: { left: '2%', right: '4%', bottom: '5%', top: '15%', containLabel: true },
       xAxis: { type: 'category', boundaryGap: false, data: years },
       yAxis: { type: 'value', axisLabel: { formatter: (value) => formatNumber(value) } },
       series: [
         {
-          name: 'Инвестиции',
+          name: 'Факт',
           type: 'line',
-          data: amounts,
-          smooth: true,
+          data: factAmounts,
+          smooth: false, // ИЗМЕНЕНО: рубленая линия
           itemStyle: { color: '#2E7D32' },
           areaStyle: { color: 'rgba(46, 125, 50, 0.2)' }
+        },
+        {
+          name: 'План',
+          type: 'line',
+          data: planAmounts,
+          smooth: false, // ИЗМЕНЕНО: рубленая линия
+          itemStyle: { color: '#F57C00' },
+          lineStyle: { type: 'dashed', width: 2 } // План пунктиром
         }
       ]
     };

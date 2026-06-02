@@ -140,17 +140,22 @@ async function loadOrgs() {
     if (filterDistricts.value.length) params.districts = filterDistricts.value.join(',')
     if (filterSmp.value !== null) params.smp = filterSmp.value
 
-    const { data } = await organizationsAPI.getAll(params)
-    organizations.value = data.map((org, i) => ({ ...org, index: i + 1 }))
+    const response = await organizationsAPI.getAll(params)
+    // Безопасное извлечение. Иногда Axios заворачивает данные в response.data.data
+    const responseData = response.data?.data || response.data || []
+    organizations.value = Array.isArray(responseData) ? responseData.map((org, i) => ({ ...org, index: i + 1 })) : []
+    
   } catch (e) {
-    snackbarText.value = 'Ошибка загрузки данных'
+    // ВЫВОДИМ ОШИБКУ В КОНСОЛЬ ДЛЯ ДЕБАГА
+    console.error("API Error in loadOrgs:", e.response?.data || e.message || e)
+    snackbarText.value = 'Ошибка загрузки данных: ' + (e.response?.data?.detail || 'Сервер недоступен')
     snackbarColor.value = 'error'
     snackbar.value = true
+    organizations.value = [] // Защита от падения UI
   } finally {
     loading.value = false
   }
 }
-
 async function exportToExcel() {
   exporting.value = true
   try {

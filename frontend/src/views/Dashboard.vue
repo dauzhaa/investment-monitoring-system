@@ -202,13 +202,13 @@ const areaOption = computed(() => {
     yAxis: { type: 'value', axisLabel: { formatter: v => formatMoney(v) } },
     series: [
       {
-        name: 'Факт', type: 'line', smooth: true,
+        name: 'Факт', type: 'line', smooth: false,
         itemStyle: { color: '#2E7D32' },
         areaStyle: { color: 'rgba(46, 125, 50, 0.2)' },
         data: trends.value.history?.map(d => d.amount) || []
       },
       {
-        name: 'План', type: 'line', smooth: true,
+        name: 'План', type: 'line', smooth: false,
         itemStyle: { color: '#F57C00' },
         lineStyle: { type: 'dashed', width: 2 },
         data: trends.value.history?.map(d => d.forecast) || []
