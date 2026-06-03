@@ -100,7 +100,7 @@
       </v-col>
       <v-col cols="12" md="4">
         <v-card elevation="2" class="rounded-lg h-100">
-          <v-card-title class="text-subtitle-1 font-weight-bold">Воронка: План → Факт → Отчёт</v-card-title>
+          <v-card-title class="text-subtitle-1 font-weight-bold">Воронка: Факт → План → Отчёт</v-card-title>
           <v-card-text><div ref="funnelRef" style="height: 300px; width: 100%;"></div></v-card-text>
         </v-card>
       </v-col>
@@ -233,36 +233,50 @@ const fetchData = async () => {
     }
 
     if (data.stack && charts.value.stack) {
+      const isBad = (n) => !n || String(n).includes('Без района') || String(n).includes('Не указан')
+      const cats = data.stack.categories
+      const keep = cats.map((n, i) => (isBad(n) ? -1 : i)).filter(i => i >= 0)
+      const newCats = keep.map(i => cats[i])
+      const newSeries = data.stack.series.map(s => ({ ...s, data: keep.map(i => s.data[i]) }))
       charts.value.stack.setOption({
-        yAxis: { data: data.stack.categories, axisLabel: { formatter: highlightFormatter, rich: { active: { color: '#1976D2', fontWeight: 'bold' } } } },
-        series: data.stack.series
+        yAxis: {
+          data: newCats,
+          axisLabel: { interval: 0, fontSize: 11, formatter: highlightFormatter, rich: { active: { color: '#1976D2', fontWeight: 'bold' } } }
+        },
+        series: newSeries
       })
     }
 
     if (data.heatmap && charts.value.heatmap) {
-      heatmapHeight.value = Math.max(400, data.heatmap.xAxis.length * 28 + 150)
+      // --- Убираем строку "Без района" с переиндексацией ---
+      const isBad = (n) => !n || String(n).includes('Без района') || String(n).includes('Не указан')
+      const rawNames = data.heatmap.xAxis
+      const bad = new Set()
+      const remap = {}
+      const names = []
+      rawNames.forEach((n, i) => {
+        if (isBad(n)) { bad.add(i) }
+        else { remap[i] = names.length; names.push(n) }
+      })
+
+      heatmapHeight.value = Math.max(400, names.length * 28 + 150)
       await nextTick()
       charts.value.heatmap.resize()
-      
+
       const metricsData = [];
       const orgsData = [];
-
-      // ИЗМЕНЕНО: Разделяем данные процентов (0-4) и данные Организаций (5)
       data.heatmap.data.forEach(item => {
-        // item: [district_idx, metric_idx, val]
+        if (bad.has(item[0])) return            // пропускаем "Без района"
+        const di = remap[item[0]]               // новый индекс строки
         const val = item[2];
-        if (item[1] === 5) {
-          orgsData.push([5, item[0], val]); // Для Организаций
-        } else {
-          metricsData.push([item[1], item[0], val]); // Для Процентов
-        }
+        if (item[1] === 5) orgsData.push([5, di, val]);
+        else metricsData.push([item[1], di, val]);
       });
 
       charts.value.heatmap.setOption({
-        yAxis: { data: data.heatmap.xAxis, axisLabel: { interval: 0, fontSize: 11, width: 170, overflow: 'truncate', formatter: highlightFormatter, rich: { active: { color: '#1976D2', fontWeight: 'bold' } } } },
+        yAxis: { data: names, axisLabel: { interval: 0, fontSize: 11, width: 170, overflow: 'truncate', formatter: highlightFormatter, rich: { active: { color: '#1976D2', fontWeight: 'bold' } } } },
         series: [
           { type: 'heatmap', data: metricsData, label: { show: true, fontSize: 11, formatter: (p) => p.data[2] != null ? p.data[2] : '' } },
-          // ИЗМЕНЕНО: Жестко заданный светло-синий цвет для столбца Организаций, игнорирующий visualMap
           { type: 'heatmap', data: orgsData, itemStyle: { color: '#BBDEFB' }, label: { show: true, fontSize: 11, fontWeight: 'bold', color: '#000', formatter: (p) => p.data[2] != null ? p.data[2] : '' } }
         ]
       })

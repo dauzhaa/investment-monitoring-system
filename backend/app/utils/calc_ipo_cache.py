@@ -59,18 +59,25 @@ async def calculate_and_cache_ipo(year: int = 2024, excel_path: str = '/app/data
             forecast = (await db.execute(
                 select(InvestmentForecast)
                 .where(
-                    InvestmentForecast.organization_id == org.id, 
-                    InvestmentForecast.year == year, 
-                    InvestmentForecast.forecast_type == 'первоначальный'
+                    InvestmentForecast.organization_id == org.id,
+                    InvestmentForecast.year == year,
+                )
+                .order_by(
+                    InvestmentForecast.revision_date.desc().nullslast(),
+                    InvestmentForecast.id.desc(),
                 )
             )).scalars().first()
             plan_amount = float(forecast.forecast_amount) if forecast and forecast.forecast_amount else 0.0
             
-            fact = (await db.execute(
-                select(InvestmentFact)
-                .where(InvestmentFact.organization_id == org.id, InvestmentFact.year == year)
-            )).scalars().first()
-            fact_amount = float(fact.amount) if fact and fact.amount else 0.0
+            from sqlalchemy import func
+            fact_amount = (await db.execute(
+                select(func.max(InvestmentFact.amount))
+                .where(
+                    InvestmentFact.organization_id == org.id,
+                    InvestmentFact.year == year,
+                )
+            )).scalar() or 0.0
+            fact_amount = float(fact_amount)
             
             # 3. ДОБАВЛЕНО: Достаем реальное количество ошибок валидации для этой организации
             actual_errors = errors_map.get(org.inn, 0)
