@@ -9,7 +9,7 @@ from app.models.report_submission import ReportSubmission
 from app.models.organization_ipo import OrganizationIPO
 from app.services.ipo_calculator import IPOCalculator
 
-async def calculate_and_cache_ipo(year: int = 2024, excel_path: str = '/app/data.xlsx'):
+async def calculate_and_cache_ipo(year: int = 2024, excel_path: str = '/app/uploads/data.xlsx'):
     # 1. ДОБАВЛЕНО: Считываем количество ошибок валидации из нового Excel-файла
     errors_map = {}
     try:
@@ -131,4 +131,4 @@ async def calculate_and_cache_ipo(year: int = 2024, excel_path: str = '/app/data
 if __name__ == "__main__":
     # Укажи тут путь к файлу. Если запускаешь локально на Mac, возможно путь будет './data.xlsx'
     # Если в Docker - '/app/data.xlsx'
-    asyncio.run(calculate_and_cache_ipo(2024, '/app/data.xlsx'))
+    asyncio.run(calculate_and_cache_ipo(2024, '/app/uploads/data.xlsx'))
