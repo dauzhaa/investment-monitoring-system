@@ -41,7 +41,7 @@ async def get_district_details(district_name: str, db: AsyncSession = Depends(ge
     if not current_year:
         current_year = date.today().year
     
-    # План
+    # План (за current_year — для верхних карточек stats и таблицы организаций)
     plan_subq = select(InvestmentForecast.organization_id, func.max(InvestmentForecast.id).label("mid")).where(
         InvestmentForecast.organization_id.in_(org_ids), InvestmentForecast.year == current_year
     ).group_by(InvestmentForecast.organization_id).subquery()
@@ -60,7 +60,7 @@ async def get_district_details(district_name: str, db: AsyncSession = Depends(ge
     )
     facts = dict(fact_res.all())
     
-    # История фактов по годам
+    # --- История ФАКТОВ по годам ---
     hist_subq = select(InvestmentFact.year, InvestmentFact.organization_id, func.max(InvestmentFact.amount).label("max_amt")).where(
         InvestmentFact.organization_id.in_(org_ids)
     ).group_by(InvestmentFact.year, InvestmentFact.organization_id).subquery()
@@ -69,7 +69,35 @@ async def get_district_details(district_name: str, db: AsyncSession = Depends(ge
         select(hist_subq.c.year, func.sum(hist_subq.c.max_amt))
         .group_by(hist_subq.c.year).order_by(hist_subq.c.year)
     )
-    history = [{"year": row[0], "amount": round(float(row[1] or 0), 2)} for row in hist_res.all()]
+    fact_by_year = {row[0]: round(float(row[1] or 0), 2) for row in hist_res.all()}
+
+    # --- НОВОЕ: История ПЛАНА по годам ---
+    # последний прогноз каждой организации за каждый год (max id), затем сумма по году
+    plan_hist_subq = select(
+        InvestmentForecast.year,
+        InvestmentForecast.organization_id,
+        func.max(InvestmentForecast.id).label("mid"),
+    ).where(
+        InvestmentForecast.organization_id.in_(org_ids)
+    ).group_by(InvestmentForecast.year, InvestmentForecast.organization_id).subquery()
+
+    plan_hist_res = await db.execute(
+        select(plan_hist_subq.c.year, func.sum(InvestmentForecast.forecast_amount))
+        .join(plan_hist_subq, InvestmentForecast.id == plan_hist_subq.c.mid)
+        .group_by(plan_hist_subq.c.year)
+    )
+    forecast_by_year = {row[0]: round(float(row[1] or 0), 2) for row in plan_hist_res.all()}
+
+    # --- СЛИЯНИЕ факта и плана по годам ---
+    all_years = sorted(set(fact_by_year) | set(forecast_by_year))
+    history = [
+        {
+            "year": y,
+            "amount": fact_by_year.get(y, 0.0),
+            "forecast": forecast_by_year.get(y, 0.0),   # ← фронт теперь видит «План»
+        }
+        for y in all_years
+    ]
     
     total_forecast = sum(plans.values())
     total_fact = sum(facts.values())
