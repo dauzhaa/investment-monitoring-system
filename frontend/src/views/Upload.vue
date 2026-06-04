@@ -3,25 +3,44 @@
     <v-row>
       <v-col cols="12" md="7">
         <v-card class="stat-card pa-6">
-          <div class="section-title">Загрузка файла Excel (форма П-2)</div>
+          <div class="section-title text-h5 font-weight-bold mb-4" style="color: #1B3A5C;">Загрузка файла Excel (форма П-2)</div>
 
           <div
             class="upload-dropzone"
-            :class="{ 'upload-dropzone--active': isDragging }"
+            :class="{ 'upload-dropzone--active': isDragging, 'upload-dropzone--has-file': file }"
             @dragover.prevent="isDragging = true"
             @dragleave="isDragging = false"
             @drop.prevent="handleDrop"
             @click="triggerFileInput"
           >
-            <v-icon size="64" class="upload-icon" :color="isDragging ? '#2E7D32' : '#9E9E9E'">
-              mdi-cloud-upload-outline
-            </v-icon>
-            <p class="mt-4 text-h6 font-weight-bold" :class="isDragging ? 'text-success' : 'text-primary'">
-              {{ file ? file.name : 'Перетащите файл сюда' }}
-            </p>
-            <p class="text-body-2 text-grey-darken-1">
-              или нажмите, чтобы выбрать файл вручную (XLSX, XLS)
-            </p>
+            <div v-if="!file">
+              <v-icon size="72" class="upload-icon" :color="isDragging ? '#2E7D32' : '#9E9E9E'">
+                mdi-cloud-upload-outline
+              </v-icon>
+              <p class="mt-4 text-h5 font-weight-bold" :class="isDragging ? 'text-success' : 'text-primary'">
+                Перетащите файл сюда
+              </p>
+              <p class="text-subtitle-1 text-grey-darken-2 font-weight-medium">
+                или нажмите, чтобы выбрать файл вручную (XLSX, XLS)
+              </p>
+            </div>
+
+            <div v-else class="file-preview-zone pa-2 d-flex flex-column align-center justify-center relative w-100" @click.stop>
+              <v-btn icon="mdi-close" size="small" color="error" variant="flat" class="position-absolute file-clear-btn" @click="file = null" />
+              
+              <v-icon size="84" color="#2E7D32" class="mb-2">
+                mdi-file-excel-box
+              </v-icon>
+              
+              <div class="text-h6 font-weight-bold text-success text-truncate max-w-100 px-4 mb-1">
+                {{ file.name }}
+              </div>
+              
+              <v-chip size="small" color="grey-darken-3" variant="flat" class="text-white font-weight-bold">
+                Размер: {{ (file.size / 1024).toFixed(1) }} Кб
+              </v-chip>
+            </div>
+
             <v-file-input
               ref="hiddenFileInput"
               v-model="file"
@@ -39,9 +58,9 @@
             </v-col>
           </v-row>
 
-          <v-btn color="#2E7D32" block class="mt-6 text-white text-subtitle-1 font-weight-bold" size="large" @click="uploadFile" :loading="uploading" :disabled="!file || !reportType">
-            <v-icon start>mdi-upload</v-icon>
-            Загрузить и обработать
+          <v-btn color="#2E7D32" block class="mt-6 text-white text-h6 font-weight-bold" size="large" @click="uploadFile" :loading="uploading" :disabled="!file || !reportType">
+            <v-icon start size="24">mdi-upload</v-icon>
+            Загрузить и обработать данные
           </v-btn>
 
           <v-expand-transition>
@@ -114,23 +133,23 @@
 
       <v-col cols="12" md="5">
         <v-card class="stat-card pa-5 mb-4">
-          <div class="section-title">Шаблоны для заполнения</div>
-          <v-list density="compact">
-            <v-list-item v-for="t in templates" :key="t.type" @click="downloadTemplate(t.type)" prepend-icon="mdi-file-download-outline" :title="t.title" :subtitle="t.desc" class="rounded-lg mb-1" />
+          <div class="section-title text-h6 font-weight-bold mb-2">Шаблоны для заполнения</div>
+          <v-list density="default">
+            <v-list-item v-for="t in templates" :key="t.type" @click="downloadTemplate(t.type)" prepend-icon="mdi-file-download-outline" :title="t.title" :subtitle="t.desc" class="rounded-lg mb-2 font-weight-bold" border />
           </v-list>
         </v-card>
 
         <v-card class="stat-card pa-5">
-          <div class="section-title">Экспорт данных (База)</div>
-          <v-list density="compact">
-            <v-list-item prepend-icon="mdi-calendar-range" title="Динамика 2022–2025" subtitle="ФАКТ / ПЛАН по годам" @click="exportYearly" class="rounded-lg mb-1" />
-            <v-list-item prepend-icon="mdi-map-marker-multiple" title="По районам" subtitle="Все районы за выбранный год" @click="exportDistricts" class="rounded-lg mb-1" />
+          <div class="section-title text-h6 font-weight-bold mb-2">Экспорт данных (База)</div>
+          <v-list density="default">
+            <v-list-item prepend-icon="mdi-calendar-range" title="Динамика 2022–2025" subtitle="ФАКТ / ПЛАН по годам" @click="exportYearly" class="rounded-lg mb-2 font-weight-bold" border />
+            <v-list-item prepend-icon="mdi-map-marker-multiple" title="По районам области" subtitle="Все районы за выбранный год" @click="exportDistricts" class="rounded-lg mb-1 font-weight-bold" border />
           </v-list>
         </v-card>
       </v-col>
     </v-row>
 
-    <v-snackbar v-model="snackbar" :color="snackbarColor" timeout="3000">{{ snackbarText }}</v-snackbar>
+    <v-snackbar v-model="snackbar" :color="snackbarColor" timeout="3000" class="font-weight-bold">{{ snackbarText }}</v-snackbar>
   </div>
 </template>
 
@@ -156,18 +175,22 @@ const reportTypes = [
 ]
 
 const templates = [
-  { type: 'annual', title: 'Шаблон годового отчёта', desc: 'Excel с колонками П-2' },
-  { type: 'quarterly', title: 'Шаблон квартального', desc: 'Для квартальной сдачи' },
+  { type: 'annual', title: 'Шаблон годового отчёта', desc: 'Excel с валидными колонками П-2' },
+  { type: 'quarterly', title: 'Шаблон квартального отчета', desc: 'Для поквартального контроля сдачи' },
 ]
 
 function triggerFileInput() {
-  hiddenFileInput.value.$el.querySelector('input').click()
+  if (!file.value) {
+    hiddenFileInput.value.$el.querySelector('input').click()
+  }
 }
 
 function handleDrop(e) {
   isDragging.value = false
   const dropped = e.dataTransfer.files[0]
-  if (dropped) file.value = dropped
+  if (dropped && (dropped.name.endsWith('.xlsx') || dropped.name.endsWith('.xls'))) {
+    file.value = dropped
+  }
 }
 
 async function uploadFile() {
@@ -179,7 +202,7 @@ async function uploadFile() {
     result.value = { 
       status: 'success', 
       records: data.records_processed || data.records || 0, 
-      errors: data.errors || [] // Теперь это всегда массив
+      errors: data.errors || []
     }
     file.value = null
   } catch (e) {
@@ -228,13 +251,17 @@ function showError(msg) {
 
 <style scoped>
 .upload-dropzone {
-  border: 2px dashed #CFD8DC;
+  border: 2px dashed #B0BEC5;
   border-radius: 16px;
-  padding: 64px 24px;
+  padding: 48px 24px;
   text-align: center;
   transition: all 0.3s ease;
   cursor: pointer;
   background-color: #F8F9FA;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
 }
 
 .upload-dropzone:hover {
@@ -247,14 +274,22 @@ function showError(msg) {
   background-color: rgba(46, 125, 50, 0.05) !important;
 }
 
-.upload-dropzone--active .upload-icon {
-  animation: bounceCloud 1s infinite;
+.upload-dropzone--has-file {
+  border: 2px solid #2E7D32 !important;
+  background-color: #FFF !important;
+  cursor: default;
 }
 
-@keyframes bounceCloud {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-12px); }
+.file-preview-zone {
+  width: 100%;
 }
 
+.file-clear-btn {
+  top: -10px;
+  right: -10px;
+  z-index: 10;
+}
+
+.max-w-100 { max-width: 100%; }
 .gap-2 { gap: 8px; }
 </style>

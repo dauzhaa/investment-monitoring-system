@@ -6,7 +6,22 @@
           <v-text-field v-model="search" prepend-inner-icon="mdi-magnify" placeholder="Поиск по названию / ИНН" variant="outlined" density="compact" hide-details clearable color="#1B3A5C" />
         </v-col>
         <v-col cols="12" sm="3">
-          <v-select v-model="filterDistricts" :items="districts" item-title="name" item-value="name" label="Район" variant="outlined" density="compact" hide-details clearable multiple chips color="#1B3A5C" />
+          <v-select 
+            v-model="filterDistricts" 
+            :items="districts" 
+            item-title="name" 
+            item-value="name" 
+            label="Район" 
+            placeholder="Все"
+            persistent-placeholder
+            variant="outlined" 
+            density="compact" 
+            hide-details 
+            clearable 
+            multiple 
+            chips 
+            color="#1B3A5C" 
+          />
         </v-col>
         <v-col cols="12" sm="2">
           <v-select v-model="filterSmp" :items="[{ title: 'Все', value: null }, { title: 'Да', value: true }, { title: 'Нет', value: false }]" item-title="title" item-value="value" label="СМП" variant="outlined" density="compact" hide-details color="#1B3A5C" />
@@ -15,42 +30,56 @@
           <v-select v-model="selectedYear" :items="[2022, 2023, 2024, 2025]" label="Год" variant="outlined" density="compact" hide-details color="#1B3A5C" />
         </v-col>
         <v-col cols="12" sm="2" class="d-flex gap-2">
-          <v-btn color="#1B3A5C" variant="flat" @click="loadOrgs" :loading="loading" block>Найти</v-btn>
+          <v-btn color="#1B3A5C" class="font-weight-bold" variant="flat" @click="loadOrgs" :loading="loading" block>Найти</v-btn>
         </v-col>
       </v-row>
     </v-card>
 
     <div class="d-flex justify-space-between align-center mb-4">
       <div class="d-flex align-center gap-4">
-        <span class="text-body-2 font-weight-medium text-grey-darken-1">Найдено: {{ organizations.length }}</span>
+        <span class="text-subtitle-1 font-weight-bold text-grey-darken-3">Найдено учреждений: {{ organizations.length }}</span>
         
         <v-btn-toggle v-model="viewMode" mandatory density="compact" color="#1B3A5C" class="rounded-lg border">
           <v-btn value="table" icon="mdi-table" size="small"></v-btn>
           <v-btn value="cards" icon="mdi-view-grid" size="small"></v-btn>
         </v-btn-toggle>
+
+        <div v-if="viewMode === 'table'" class="d-flex align-center ml-4">
+          <span class="text-caption font-weight-bold text-grey-darken-2 mr-2">Показывать по:</span>
+          <v-select v-model="itemsPerPage" :items="[10, 25, 50, 100, { title: 'Все', value: -1 }]" density="compact" variant="outlined" hide-details style="width: 110px;" />
+        </div>
       </div>
 
-      <v-btn variant="tonal" color="#1B3A5C" size="small" prepend-icon="mdi-microsoft-excel" @click="exportToExcel" :loading="exporting">
-        Экспорт
+      <v-btn variant="flat" color="#1B3A5C" size="default" class="text-white font-weight-bold" prepend-icon="mdi-microsoft-excel" @click="exportToExcel" :loading="exporting">
+        Экспорт в XLSX/CSV
       </v-btn>    
     </div>
 
     <v-card v-if="viewMode === 'table'" class="stat-card">
-      <v-data-table :headers="headers" :items="organizations" :items-per-page="25" :items-per-page-options="[{value: 10, title: '10'}, {value: 50, title: '50'}, {value: 100, title: '100'}, {value: -1, title: 'Показать все'}]"density="compact" hover class="orgs-table" @click:row="(e, { item }) => navigateToDetail(item.id)">
+      <v-data-table 
+        :headers="headers" 
+        :items="organizations" 
+        :items-per-page="itemsPerPage" 
+        :items-per-page-options="[{value: 10, title: '10'}, {value: 25, title: '25'}, {value: 50, title: '50'}, {value: 100, title: '100'}, {value: -1, title: 'Все'}]" 
+        density="default" 
+        hover 
+        class="orgs-table" 
+        @click:row="(e, { item }) => navigateToDetail(item.id)"
+      >
         <template #item.name="{ item }">
-          <div class="org-name">{{ item.name }}</div>
+          <div class="org-name font-weight-bold">{{ item.name }}</div>
         </template>
         <template #item.district="{ item }">
           {{ item.district?.name || item.district || '—' }}
         </template>
         <template #item.is_smp="{ item }">
-          <v-chip v-if="item.is_smp" size="x-small" color="#2E7D32" variant="tonal">СМП</v-chip>
+          <v-chip v-if="item.is_smp" size="small" color="#2E7D32" variant="flat" class="text-white font-weight-bold">СМП</v-chip>
         </template>
         <template #item.fact_amount="{ item }">
-          <span class="font-weight-bold" style="color: #2E7D32;">{{ formatMoney(item.fact_amount) }}</span>
+          <span class="font-weight-bold text-subtitle-2" style="color: #2E7D32;">{{ formatMoney(item.fact_amount) }}</span>
         </template>
         <template #item.plan_amount="{ item }">
-          <span style="color: #F57C00;">{{ formatMoney(item.plan_amount) }}</span>
+          <span class="font-weight-bold text-subtitle-2" style="color: #E65100;">{{ formatMoney(item.plan_amount) }}</span>
         </template>
       </v-data-table>
     </v-card>
@@ -59,35 +88,35 @@
       <v-col v-for="org in organizations" :key="org.id" cols="12" sm="6" md="4" lg="3">
         <v-card class="stat-card h-100 pa-4 d-flex flex-column cursor-pointer" hover @click="navigateToDetail(org.id)">
           <div class="d-flex justify-space-between align-start mb-2">
-            <v-chip size="x-small" :color="org.is_smp ? '#2E7D32' : 'grey'" variant="tonal" class="font-weight-bold">
+            <v-chip size="small" :color="org.is_smp ? '#2E7D32' : 'grey-darken-2'" variant="flat" class="font-weight-bold text-white">
               {{ org.is_smp ? 'СМП' : 'Крупный бизнес' }}
             </v-chip>
-            <div class="text-caption text-grey">ИНН: {{ org.inn }}</div>
+            <div class="text-subtitle-2 font-weight-bold text-grey">ИНН: {{ org.inn }}</div>
           </div>
-          <div class="text-subtitle-2 font-weight-bold mb-1" style="color: #1B3A5C; line-height: 1.3;">
+          <div class="text-subtitle-1 font-weight-bold mb-2" style="color: #1B3A5C; line-height: 1.3;">
             {{ org.name }}
           </div>
-          <div class="text-caption text-grey-darken-1 mb-3">
-            <v-icon size="14" class="mr-1">mdi-map-marker-outline</v-icon>
+          <div class="text-body-2 font-weight-medium text-grey-darken-2 mb-3">
+            <v-icon size="16" class="mr-1">mdi-map-marker-outline</v-icon>
             {{ org.district?.name || org.district || 'Не указан' }}
           </div>
           <v-spacer></v-spacer>
           <v-divider class="mb-2"></v-divider>
           <div class="d-flex justify-space-between align-center">
             <div>
-              <div class="text-caption text-grey">Факт (тыс. ₽)</div>
-              <div class="text-body-2 font-weight-bold" style="color: #2E7D32;">{{ formatMoney(org.fact_amount) }}</div>
+              <div class="text-caption font-weight-bold text-grey">Факт (тыс. ₽)</div>
+              <div class="text-subtitle-1 font-weight-bold" style="color: #2E7D32;">{{ formatMoney(org.fact_amount) }}</div>
             </div>
             <div class="text-right">
-              <div class="text-caption text-grey">План (тыс. ₽)</div>
-              <div class="text-body-2 font-weight-bold" style="color: #F57C00;">{{ formatMoney(org.plan_amount) }}</div>
+              <div class="text-caption font-weight-bold text-grey">План (тыс. ₽)</div>
+              <div class="text-subtitle-1 font-weight-bold" style="color: #F57C00;">{{ formatMoney(org.plan_amount) }}</div>
             </div>
           </div>
         </v-card>
       </v-col>
     </v-row>
 
-    <v-snackbar v-model="snackbar" :color="snackbarColor" timeout="3000">{{ snackbarText }}</v-snackbar>
+    <v-snackbar v-model="snackbar" :color="snackbarColor" timeout="3000" class="font-weight-bold">{{ snackbarText }}</v-snackbar>
   </div>
 </template>
 
@@ -98,7 +127,7 @@ import { organizationsAPI, dictionariesAPI } from '@/services/api'
 
 const router = useRouter()
 
-const viewMode = ref('table') // Режим отображения: table или cards
+const viewMode = ref('table')
 const loading = ref(false)
 const exporting = ref(false)
 const search = ref('')
@@ -107,19 +136,20 @@ const filterDistricts = ref([])
 const filterSmp = ref(null)
 const districts = ref([])
 const organizations = ref([])
+const itemsPerPage = ref(25)
 
 const snackbar = ref(false)
 const snackbarText = ref('')
 const snackbarColor = ref('success')
 
 const headers = [
-  { title: '№', key: 'index', width: '50px', sortable: false },
-  { title: 'Наименование', key: 'name', width: '35%' },
+  { title: '№', key: 'index', width: '60px', sortable: false },
+  { title: 'Наименование организации', key: 'name', width: '40%' },
   { title: 'ИНН', key: 'inn', width: '130px' },
-  { title: 'Район', key: 'district' },
-  { title: 'СМП', key: 'is_smp', width: '70px', align: 'center' },
-  { title: 'ФАКТ, тыс. ₽', key: 'fact_amount', width: '130px', align: 'end' },
-  { title: 'ПЛАН, тыс. ₽', key: 'plan_amount', width: '130px', align: 'end' },
+  { title: 'Административный район', key: 'district' },
+  { title: 'Статус СМП', key: 'is_smp', width: '90px', align: 'center' },
+  { title: 'ФАКТ, тыс. ₽', key: 'fact_amount', width: '140px', align: 'end' },
+  { title: 'ПЛАН, тыс. ₽', key: 'plan_amount', width: '140px', align: 'end' },
 ]
 
 function formatMoney(val) {
@@ -141,21 +171,11 @@ async function loadOrgs() {
     if (filterSmp.value !== null) params.smp = filterSmp.value
 
     const response = await organizationsAPI.getAll(params)
-    // Безопасное извлечение. Иногда Axios заворачивает данные в response.data.data
     const responseData = response.data?.data || response.data || []
     organizations.value = Array.isArray(responseData) ? responseData.map((org, i) => ({ ...org, index: i + 1 })) : []
-    
   } catch (e) {
-    let msg = 'Сервер недоступен'
-    if (e.code === 'ECONNABORTED') {
-      msg = 'Timeout: сервер не ответил за 30с'
-    } else if (e.response) {
-      msg = `Ошибка ${e.response.status}: ${e.response.data?.detail || 'см. консоль'}`
-    } else if (e.request) {
-      msg = 'Нет ответа (CORS / редирект 307 / сеть)'
-    }
-    console.error('API Error in loadOrgs:', e.code, e.response?.status, e)
-    snackbarText.value = msg
+    console.error('API Error in loadOrgs:', e)
+    snackbarText.value = 'Ошибка загрузки данных'
     snackbarColor.value = 'error'
     snackbar.value = true
     organizations.value = []
@@ -163,6 +183,7 @@ async function loadOrgs() {
     loading.value = false
   }
 }
+
 async function exportToExcel() {
   exporting.value = true
   try {
@@ -203,8 +224,16 @@ onMounted(async () => {
 
 <style scoped>
 .orgs-table :deep(.v-data-table__tr) { cursor: pointer; }
-.orgs-table :deep(.v-data-table__tr:hover) { background: #F8F9FB !important; }
-.org-name { font-weight: 500; font-size: 13px; max-width: 400px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.orgs-table :deep(.v-data-table__tr:hover) { background: #F0F4F8 !important; }
+.orgs-table :deep(.v-data-table-header th) {
+  font-size: 14px !important;
+  font-weight: bold !important;
+  background-color: #F8F9FA !important;
+}
+.orgs-table :deep(.v-data-table__tr td) {
+  font-size: 14px !important;
+}
+.org-name { max-width: 450px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gap-2 { gap: 8px; }
 .gap-4 { gap: 16px; }
 .cursor-pointer { cursor: pointer; }

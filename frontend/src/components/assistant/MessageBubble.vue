@@ -1,32 +1,26 @@
 <template>
-  <div class="d-flex w-100" :class="message.role === 'user' ? 'justify-end' : 'justify-start'">
-    
-    <!-- Аватар Бота -->
-    <v-avatar v-if="message.role === 'assistant'" size="36" color="blue-lighten-5" class="mr-3 mt-1">
-      <v-icon size="20" color="primary">mdi-robot-outline</v-icon>
+  <div class="d-flex w-100 mb-4" :class="message.role === 'user' ? 'justify-end' : 'justify-start'">
+    <v-avatar v-if="message.role === 'assistant'" size="42" color="blue-lighten-5" class="mr-3 mt-1 shadow-sm">
+      <v-icon size="24" color="primary">mdi-robot-outline</v-icon>
     </v-avatar>
-
-    <!-- Баббл сообщения -->
+    
     <div 
-      class="message-bubble pa-4 rounded-xl" 
-      :class="message.role === 'user' ? 'bg-primary text-white rounded-tr-0' : 'bg-white border rounded-tl-0'"
-      style="max-width: 85%;"
+      class="message-bubble pa-4" 
+      :class="message.role === 'user' ? 'bg-primary text-white rounded-xl rounded-tr-0' : 'bg-white border rounded-xl rounded-tl-0 content-bot-align'"
+      style="max-width: 82%; box-shadow: 0 2px 8px rgba(0,0,0,0.05);"
     >
-      <!-- Блок с функциями (Tool Calls) -->
-      <div v-if="message.tool_calls && message.tool_calls.length" class="mb-3">
+      <div v-if="message.tool_calls && message.tool_calls.length" class="mb-3 w-100">
         <v-expansion-panels variant="accordion" class="border rounded-lg bg-grey-lighten-5">
           <v-expansion-panel v-for="(tool, idx) in message.tool_calls" :key="idx" elevation="0">
-            <v-expansion-panel-title class="py-1 px-3 min-h-0 text-caption font-weight-medium text-grey-darken-2">
-              <v-icon start size="16">mdi-code-json</v-icon> 
-              ▸ Вызов: {{ tool.name }}(...)
+            <v-expansion-panel-title class="py-2 px-3 min-h-0 text-subtitle-2 font-weight-bold text-grey-darken-3">
+              <v-icon start size="18" color="primary">mdi-code-json</v-icon> 
+              Системный вызов: {{ tool.name }}(...)
             </v-expansion-panel-title>
             <v-expansion-panel-text class="text-caption px-3 pb-3 bg-grey-lighten-4">
               <pre class="overflow-x-auto text-grey-darken-3"><code>{{ JSON.stringify(tool.result, null, 2) }}</code></pre>
             </v-expansion-panel-text>
           </v-expansion-panel>
         </v-expansion-panels>
-
-        <!-- Inline Рендереры для графиков -->
         <div class="mt-4">
           <ToolResultRenderer 
             v-for="(tool, idx) in message.tool_calls" 
@@ -37,8 +31,7 @@
         </div>
       </div>
 
-      <!-- Текст сообщения (Markdown) -->
-      <div v-if="message.content" class="markdown-body text-body-1" v-html="renderedContent"></div>
+      <div v-if="message.content" class="markdown-body text-projector-ready" v-html="renderedContent"></div>
     </div>
   </div>
 </template>
@@ -60,26 +53,45 @@ const renderedContent = computed(() => {
 })
 </script>
 
-<style>
-/* Немного стилей для Markdown внутри баббла */
-.markdown-body p { margin-bottom: 8px; }
-.markdown-body ul, .markdown-body ol { margin-left: 20px; margin-bottom: 8px; }
-.markdown-body pre { background: #f5f5f5; padding: 8px; border-radius: 4px; overflow-x: auto; }
-/* Немного стилей для Markdown внутри баббла */
-.markdown-body p { margin-bottom: 8px; }
-.markdown-body ul, .markdown-body ol { margin-left: 20px; margin-bottom: 8px; }
-.markdown-body pre { background: #f5f5f5; padding: 8px; border-radius: 4px; overflow-x: auto; }
+<style scoped>
+/* Кастомизация рендеринга текста ИИ под требования проектора */
+.text-projector-ready {
+  font-size: 1.25rem !important; /* Значительно увеличенный шрифт */
+  line-height: 1.6 !important;
+  font-weight: 500;
+}
 
-/* НОВОЕ: Увеличиваем шрифт и центрируем текст бота */
-.message-bubble {
-  font-size: 1.15rem !important; /* Увеличенный шрифт */
+.content-bot-align {
+  background-color: #F8FAFC !important;
+  border-color: #E2E8F0 !important;
 }
-.markdown-body {
-  text-align: center; /* Центрирование текста */
+
+/* Стили разметки Markdown внутри баббла. Убран глобальный text-align: center */
+:deep(.markdown-body) {
+  text-align: left !important; /* Ровный левый край текста ответа */
+  color: #1E293B;
 }
-/* Если списки при центрировании выглядят криво, возвращаем им левый край: */
-.markdown-body ul, .markdown-body ol {
-  text-align: left;
-  display: inline-block;
+
+:deep(.markdown-body p) { 
+  margin-bottom: 12px; 
+}
+
+:deep(.markdown-body ul), :deep(.markdown-body ol) { 
+  margin-left: 24px; 
+  margin-bottom: 12px; 
+  text-align: left !important;
+}
+
+:deep(.markdown-body li) {
+  margin-bottom: 4px;
+}
+
+:deep(.markdown-body pre) { 
+  background: #0F172A; 
+  color: #F8FAFC;
+  padding: 12px; 
+  border-radius: 8px; 
+  overflow-x: auto; 
+  font-size: 14px;
 }
 </style>

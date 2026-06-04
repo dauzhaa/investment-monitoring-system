@@ -22,9 +22,7 @@
 
     <v-dialog v-model="matrixAreaDialog.show" max-width="600" scrollable>
       <v-card class="rounded-lg">
-        <v-card-title class="bg-blue-darken-4 text-white text-subtitle-1">
-          Зона: {{ matrixAreaDialog.title }}
-        </v-card-title>
+        <v-card-title class="bg-blue-darken-4 text-white text-subtitle-1">Зона: {{ matrixAreaDialog.title }}</v-card-title>
         <v-divider></v-divider>
         <v-card-text class="pa-0" style="max-height: 400px;">
           <v-table density="compact" class="text-caption">
@@ -56,12 +54,12 @@
       <v-row align="center" dense>
         <v-col cols="12" md="3">
           <div class="d-flex align-center mb-1">
-            <h2 class="text-h5 font-weight-bold text-blue-darken-4 mb-0">Центр ИПО</h2>
+            <h2 class="text-h4 font-weight-bold text-blue-darken-4 mb-0">Центр ИПО</h2>
             <v-tooltip text="Индекс Поведения Организации: учитывает дисциплину, качество и процент исполнения бюджета" location="bottom">
               <template v-slot:activator="{ props }"><v-icon v-bind="props" color="grey-darken-1" size="small" class="ml-2 cursor-pointer">mdi-help-circle-outline</v-icon></template>
             </v-tooltip>
           </div>
-          <div class="text-caption text-grey-darken-1">Аналитика надёжности (2024-2025)</div>
+          <div class="text-subtitle-2 font-weight-bold text-grey-darken-1">Аналитика надёжности (2024-2025)</div>
         </v-col>
         <v-col cols="12" md="9">
           <v-row dense>
@@ -78,12 +76,12 @@
     <v-row class="mb-4" dense>
       <v-col cols="12" md="4" v-for="(kpi, idx) in kpiData" :key="idx">
         <v-card elevation="2" class="rounded-lg text-center pa-2 pb-6">
-          <div class="text-subtitle-2 font-weight-bold text-grey-darken-2 mt-2">{{ kpi.title }}</div>
-          <div :ref="el => gaugeRefs[idx] = el" style="height: 220px; margin-top: -10px;"></div>
+          <div class="text-h6 font-weight-bold text-grey-darken-3 mt-2">{{ kpi.title }}</div>
+          <div :ref="el => gaugeRefs[idx] = el" style="height: 240px; margin-top: -10px;"></div>
           <div class="d-flex justify-center align-center" style="margin-top: -20px;">
-            <span class="text-caption text-grey mr-2">Регион: {{ kpi.avg }}%</span>
-            <v-chip size="x-small" :color="kpi.delta > 0 ? 'success' : 'error'" variant="flat">
-              <v-icon start size="12">{{ kpi.delta > 0 ? 'mdi-arrow-up' : 'mdi-arrow-down' }}</v-icon>
+            <span class="text-subtitle-2 font-weight-bold text-grey mr-2">Регион: {{ kpi.avg }}%</span>
+            <v-chip size="small" :color="kpi.delta > 0 ? 'success' : 'error'" variant="flat" class="font-weight-bold text-white">
+              <v-icon start size="14">{{ kpi.delta > 0 ? 'mdi-arrow-up' : 'mdi-arrow-down' }}</v-icon>
               {{ Math.abs(kpi.delta) }} ({{ kpi.desc }})
             </v-chip>
           </div>
@@ -94,14 +92,14 @@
     <v-row class="mb-4" dense>
       <v-col cols="12" md="8">
         <v-card elevation="2" class="rounded-lg h-100">
-          <v-card-title class="text-subtitle-1 font-weight-bold">Динамика ИПО по кварталам</v-card-title>
-          <v-card-text><div ref="lineRef" style="height: 300px; width: 100%;"></div></v-card-text>
+          <v-card-title class="text-h6 font-weight-bold pa-4">Динамика ИПО по кварталам</v-card-title>
+          <v-card-text><div ref="lineRef" style="height: 320px; width: 100%;"></div></v-card-text>
         </v-card>
       </v-col>
       <v-col cols="12" md="4">
         <v-card elevation="2" class="rounded-lg h-100">
-          <v-card-title class="text-subtitle-1 font-weight-bold">Воронка: Факт → План → Отчёт</v-card-title>
-          <v-card-text><div ref="funnelRef" style="height: 300px; width: 100%;"></div></v-card-text>
+          <v-card-title class="text-h6 font-weight-bold pa-4">Воронка: Факт → План → Отчёт</v-card-title>
+          <v-card-text><div ref="funnelRef" style="height: 320px; width: 100%;"></div></v-card-text>
         </v-card>
       </v-col>
     </v-row>
@@ -109,14 +107,14 @@
     <v-row class="mb-4" dense>
       <v-col cols="12" md="7">
         <v-card elevation="2" class="rounded-lg h-100">
-          <v-card-title class="text-subtitle-1 font-weight-bold">Матрица организаций: Дисциплина × Исполнение</v-card-title>
-          <v-card-text><div ref="scatterRef" style="height: 450px; width: 100%;"></div></v-card-text>
+          <v-card-title class="text-h6 font-weight-bold pa-4">Матрица организаций: Дисциплина × Исполнение</v-card-title>
+          <v-card-text><div ref="scatterRef" style="height: 470px; width: 100%;"></div></v-card-text>
         </v-card>
       </v-col>
       <v-col cols="12" md="5">
         <v-card elevation="2" class="rounded-lg h-100">
-          <v-card-title class="text-subtitle-1 font-weight-bold">Профиль надёжности</v-card-title>
-          <v-card-text><div ref="radarRef" style="height: 450px; width: 100%;"></div></v-card-text>
+          <v-card-title class="text-h6 font-weight-bold pa-4">Профиль надёжности</v-card-title>
+          <v-card-text><div ref="radarRef" style="height: 470px; width: 100%;"></div></v-card-text>
         </v-card>
       </v-col>
     </v-row>
@@ -124,20 +122,20 @@
     <v-row class="mb-4" dense>
       <v-col cols="12" md="8">
         <v-card elevation="2" class="rounded-lg h-100">
-          <v-card-title class="text-subtitle-1 font-weight-bold">Распределение профилей по районам (Стек)</v-card-title>
-          <v-card-text><div ref="stackRef" style="height: 400px; width: 100%;"></div></v-card-text>
+          <v-card-title class="text-h6 font-weight-bold pa-4">Распределение профилей по районам (Стек)</v-card-title>
+          <v-card-text><div ref="stackRef" style="height: 420px; width: 100%;"></div></v-card-text>
         </v-card>
       </v-col>
       <v-col cols="12" md="4">
         <v-card elevation="2" class="rounded-lg h-100 d-flex flex-column">
-          <v-card-title class="text-subtitle-1 font-weight-bold bg-green-lighten-5 text-green-darken-3">ТОП-5 Организаций</v-card-title>
-          <v-table density="compact" class="text-caption">
-            <tbody><tr v-for="org in topOrgs" :key="org.name"><td>{{ org.name }}</td><td class="text-right font-weight-bold text-green">{{ org.ipo }}</td></tr></tbody>
+          <v-card-title class="text-subtitle-1 font-weight-bold bg-green-lighten-5 text-green-darken-4 pa-3">ТОП-5 Организаций</v-card-title>
+          <v-table density="default" class="text-subtitle-2 font-weight-bold">
+            <tbody><tr v-for="org in topOrgs" :key="org.name"><td>{{ org.name }}</td><td class="text-right text-success font-weight-bold">{{ org.ipo }}</td></tr></tbody>
           </v-table>
           <v-divider></v-divider>
-          <v-card-title class="text-subtitle-1 font-weight-bold bg-red-lighten-5 text-red-darken-3 mt-auto">АНТИ-ТОП 5 Организаций</v-card-title>
-          <v-table density="compact" class="text-caption">
-            <tbody><tr v-for="org in bottomOrgs" :key="org.name"><td>{{ org.name }}</td><td class="text-right font-weight-bold text-red">{{ org.ipo }}</td></tr></tbody>
+          <v-card-title class="text-subtitle-1 font-weight-bold bg-red-lighten-5 text-red-darken-4 pa-3 mt-auto">АНТИ-ТОП 5 Организаций</v-card-title>
+          <v-table density="default" class="text-subtitle-2 font-weight-bold">
+            <tbody><tr v-for="org in bottomOrgs" :key="org.name"><td>{{ org.name }}</td><td class="text-right text-danger font-weight-bold">{{ org.ipo }}</td></tr></tbody>
           </v-table>
         </v-card>
       </v-col>
@@ -146,12 +144,11 @@
     <v-row class="mb-4" dense>
       <v-col cols="12">
         <v-card elevation="2" class="rounded-lg">
-          <v-card-title class="text-subtitle-1 font-weight-bold">Детальная матрица компонентов ИПО</v-card-title>
+          <v-card-title class="text-h6 font-weight-bold pa-4">Детальная матрица компонентов ИПО учреждений региона</v-card-title>
           <v-card-text><div ref="heatmapRef" :style="{ height: heatmapHeight + 'px', width: '100%' }"></div></v-card-text>
         </v-card>
       </v-col>
     </v-row>
-
   </v-container>
 </template>
 
@@ -172,7 +169,7 @@ const stackRef = ref(null)
 const heatmapRef = ref(null)
 const charts = shallowRef({})
 
-const heatmapHeight = ref(500)
+const heatmapHeight = ref(600)
 const matrixDialog = reactive({ show: false, data: {} })
 const matrixAreaDialog = reactive({ show: false, title: '', orgs: [] })
 
@@ -200,12 +197,11 @@ const fetchData = async () => {
     }
 
     if (data.funnel && charts.value.funnel) {
-      const funnelColors = ['#1976D2', '#FFB300', '#4CAF50']
-      const funnelNames = ['План', 'Факт', 'Отчёт'] // Жестко задаем правильные названия
-      
+      const funnelColors = ['#1B3A5C', '#E65100', '#2E7D32']
+      const funnelNames = ['План', 'Факт', 'Отчёт']
       const formattedFunnel = data.funnel.map((item, idx) => ({ 
         ...item, 
-        name: funnelNames[idx] || item.name, // Подменяем имя
+        name: funnelNames[idx] || item.name,
         itemStyle: { color: funnelColors[idx] } 
       }))
       charts.value.funnel.setOption({ series: [{ data: formattedFunnel }] })
@@ -219,9 +215,8 @@ const fetchData = async () => {
       charts.value.radar.setOption({
         series: [{
           data: [
-            // ИЗМЕНЕНО: Точки, линия и заливка теперь полностью зеленые
-            { value: data.radar, name: 'Выбранный срез', itemStyle: { color: '#4CAF50' }, areaStyle: { color: 'rgba(76, 175, 80, 0.4)' }, lineStyle: { color: '#4CAF50' } },
-            { value: [100, 100, 100, 100], name: 'Идеал', itemStyle: { color: '#9E9E9E' }, areaStyle: { color: 'transparent' }, lineStyle: { type: 'dashed', color: '#9E9E9E' } }
+            { value: data.radar, name: 'Выбранный срез', itemStyle: { color: '#2E7D32' }, areaStyle: { color: 'rgba(46, 125, 50, 0.45)' }, lineStyle: { color: '#2E7D32', width: 3 } },
+            { value: [100, 100, 100, 100], name: 'Идеал', itemStyle: { color: '#757575' }, areaStyle: { color: 'transparent' }, lineStyle: { type: 'dashed', color: '#757575', width: 2 } }
           ]
         }]
       })
@@ -241,14 +236,13 @@ const fetchData = async () => {
       charts.value.stack.setOption({
         yAxis: {
           data: newCats,
-          axisLabel: { interval: 0, fontSize: 11, formatter: highlightFormatter, rich: { active: { color: '#1976D2', fontWeight: 'bold' } } }
+          axisLabel: { interval: 0, fontSize: 13, fontWeight: 'bold', formatter: highlightFormatter, rich: { active: { color: '#1976D2', fontWeight: 'bold' } } }
         },
         series: newSeries
       })
     }
 
     if (data.heatmap && charts.value.heatmap) {
-      // --- Убираем строку "Без района" с переиндексацией ---
       const isBad = (n) => !n || String(n).includes('Без района') || String(n).includes('Не указан')
       const rawNames = data.heatmap.xAxis
       const bad = new Set()
@@ -259,25 +253,26 @@ const fetchData = async () => {
         else { remap[i] = names.length; names.push(n) }
       })
 
-      heatmapHeight.value = Math.max(400, names.length * 28 + 150)
+      // Шаг увеличен до 38px под крупный шрифт на проекторе
+      heatmapHeight.value = Math.max(450, names.length * 38 + 160)
       await nextTick()
       charts.value.heatmap.resize()
 
       const metricsData = [];
       const orgsData = [];
       data.heatmap.data.forEach(item => {
-        if (bad.has(item[0])) return            // пропускаем "Без района"
-        const di = remap[item[0]]               // новый индекс строки
+        if (bad.has(item[0])) return
+        const di = remap[item[0]]
         const val = item[2];
         if (item[1] === 5) orgsData.push([5, di, val]);
         else metricsData.push([item[1], di, val]);
       });
 
       charts.value.heatmap.setOption({
-        yAxis: { data: names, axisLabel: { interval: 0, fontSize: 11, width: 170, overflow: 'truncate', formatter: highlightFormatter, rich: { active: { color: '#1976D2', fontWeight: 'bold' } } } },
+        yAxis: { data: names, axisLabel: { interval: 0, fontSize: 13, fontWeight: 'bold', width: 200, overflow: 'truncate', formatter: highlightFormatter, rich: { active: { color: '#1B3A5C', fontWeight: 'bold' } } } },
         series: [
-          { type: 'heatmap', data: metricsData, label: { show: true, fontSize: 11, formatter: (p) => p.data[2] != null ? p.data[2] : '' } },
-          { type: 'heatmap', data: orgsData, itemStyle: { color: '#BBDEFB' }, label: { show: true, fontSize: 11, fontWeight: 'bold', color: '#000', formatter: (p) => p.data[2] != null ? p.data[2] : '' } }
+          { type: 'heatmap', data: metricsData, label: { show: true, fontSize: 13, fontWeight: 'bold', formatter: (p) => p.data[2] != null ? p.data[2] : '' } },
+          { type: 'heatmap', data: orgsData, itemStyle: { color: '#BBDEFB' }, label: { show: true, fontSize: 13, fontWeight: 'bold', color: '#000', formatter: (p) => p.data[2] != null ? p.data[2] : '' } }
         ]
       })
     }
@@ -291,7 +286,6 @@ const fetchData = async () => {
         ]
       })
     }
-
   } catch (error) {
     console.error("Ошибка загрузки аналитики ИПО:", error)
   }
@@ -306,11 +300,11 @@ const initGauges = () => {
     chart.setOption({
       series: [{
         type: 'gauge', startAngle: 180, endAngle: 0, min: 0, max: 100, 
-        radius: '90%', // Уменьшили, чтобы влезло название сверху
-        center: ['50%', '60%'], // Опустили визуально ниже
-        axisLine: { lineStyle: { width: 15, color: [[0.3, '#d32f2f'], [0.5, '#f57c00'], [0.7, '#fbc02d'], [0.9, '#81c784'], [1, '#388e3c']] } },
-        pointer: { length: '45%', width: 5 }, axisTick: { show: false }, splitLine: { show: false }, axisLabel: { show: false },
-        detail: { fontSize: 26, offsetCenter: [0, '35%'], formatter: '{value}%', color: 'inherit', fontWeight: 'bold' },
+        radius: '95%', 
+        center: ['50%', '65%'], 
+        axisLine: { lineStyle: { width: 18, color: [[0.3, '#d32f2f'], [0.5, '#f57c00'], [0.7, '#fbc02d'], [0.9, '#81c784'], [1, '#2E7D32']] } },
+        pointer: { length: '50%', width: 6 }, axisTick: { show: false }, splitLine: { show: false }, axisLabel: { show: false },
+        detail: { fontSize: 30, offsetCenter: [0, '35%'], formatter: '{value}%', color: 'inherit', fontWeight: 'bold' },
         data: [{ value: 0 }] 
       }]
     })
@@ -321,20 +315,23 @@ const initGauges = () => {
 const initLineChart = () => {
   const chart = echarts.init(lineRef.value)
   chart.setOption({
-    tooltip: { trigger: 'axis' }, legend: { data: ['Выбранный срез', 'Регион (Ожидание / Среднее)'], bottom: 0 },
-    grid: { left: '8%', right: '5%', top: '10%', bottom: '15%' },
+    tooltip: { trigger: 'axis', textStyle: { fontSize: 14 } }, 
+    legend: { data: ['Выбранный срез', 'Регион (Ожидание / Среднее)'], bottom: 0, textStyle: { fontSize: 14, fontWeight: 'bold' } },
+    grid: { left: '10%', right: '5%', top: '12%', bottom: '18%', containLabel: true },
     xAxis: { 
       type: 'category', 
       data: [],
       axisLabel: { 
         interval: 0,
+        fontSize: 14,
+        fontWeight: 'bold',
         formatter: function(value) { return value.replace(/Q(\d)/g, '$1 кв.'); } 
       }
     },
-    yAxis: { type: 'value', min: 40, max: 100 },
+    yAxis: { type: 'value', min: 40, max: 100, axisLabel: { fontSize: 14, fontWeight: 'bold' } },
     series: [
-      { name: 'Выбранный срез', type: 'bar', data: [], barWidth: '40%', itemStyle: { color: '#1976D2', borderRadius: [4, 4, 0, 0] } },
-      { name: 'Регион (Ожидание / Среднее)', type: 'line', data: [], smooth: false, lineStyle: { type: 'dashed', color: '#FF5722', width: 2 }, symbol: 'none' }
+      { name: 'Выбранный срез', type: 'bar', data: [], barWidth: '45%', itemStyle: { color: '#1B3A5C', borderRadius: [5, 5, 0, 0] } },
+      { name: 'Регион (Ожидание / Среднее)', type: 'line', data: [], smooth: false, lineStyle: { type: 'dashed', color: '#D32F2F', width: 3 }, symbol: 'circle', symbolSize: 8 }
     ]
   })
   return chart
@@ -343,8 +340,8 @@ const initLineChart = () => {
 const initFunnel = () => {
   const chart = echarts.init(funnelRef.value)
   chart.setOption({
-    tooltip: { trigger: 'item', formatter: '{b} <br/>{c} млн ₽' },
-    series: [{ type: 'funnel', left: '10%', top: '5%', bottom: '5%', width: '80%', gap: 2, label: { show: true, position: 'inside', formatter: '{b}\n{c} млн', fontSize: 12 }, itemStyle: { borderColor: '#fff', borderWidth: 1 }, data: [] }]
+    tooltip: { trigger: 'item', formatter: '{b} <br/><b>{c} млн ₽</b>', textStyle: { fontSize: 14 } },
+    series: [{ type: 'funnel', left: '10%', top: '8%', bottom: '8%', width: '80%', gap: 3, label: { show: true, position: 'inside', formatter: '{b}\n{c} млн', fontSize: 14, fontWeight: 'bold', color: '#fff' }, itemStyle: { borderColor: '#fff', borderWidth: 2 }, data: [] }]
   })
   return chart
 }
@@ -352,24 +349,23 @@ const initFunnel = () => {
 const initScatter2x2 = () => {
   const chart = echarts.init(scatterRef.value)
   chart.setOption({
-    tooltip: { formatter: p => p.componentType === 'markArea' ? p.name : `<b>${p.data[3]}</b><br/>Дисциплина (X): ${p.data[0]}<br/>Исполнение (Y): ${p.data[1]}<br/>Объем: ${p.data[2]} млн ₽` },
-    grid: { left: '8%', right: '5%', bottom: '10%', top: '5%' },
-    xAxis: { name: 'Дисциплина (ρ)', min: 0, max: 100, splitLine: { show: false } },
-    yAxis: { name: 'Исполнение (β)', min: 0, max: 100, splitLine: { show: false } },
+    tooltip: { textStyle: { fontSize: 14 }, formatter: p => p.componentType === 'markArea' ? p.name : `<b>${p.data[3]}</b><br/>Дисциплина (X): ${p.data[0]}%<br/>Исполнение (Y): ${p.data[1]}%<br/>Объем: ${p.data[2]} млн ₽` },
+    grid: { left: '10%', right: '8%', bottom: '12%', top: '8%', containLabel: true },
+    xAxis: { name: 'Дисциплина', nameTextStyle: { fontSize: 14, fontWeight: 'bold' }, min: 0, max: 100, splitLine: { show: false }, axisLabel: { fontSize: 13, fontWeight: 'bold' } },
+    yAxis: { name: 'Исполнение', nameTextStyle: { fontSize: 14, fontWeight: 'bold' }, min: 0, max: 100, splitLine: { show: false }, axisLabel: { fontSize: 13, fontWeight: 'bold' } },
     series: [{
       type: 'scatter', 
-      // МИНИМАЛЬНЫЙ РАЗМЕР: 10px. Теперь точки с 0 бюджетом будут видны!
-      symbolSize: d => Math.max(10, Math.sqrt(d[2]) * 2), 
+      symbolSize: d => Math.max(12, d[2] ? Math.sqrt(d[2]) * 2.5 : 12), 
       data: [],
-      itemStyle: { color: '#1976D2', opacity: 0.6 }, // Сделали чуть прозрачнее, чтобы видеть наложения
+      itemStyle: { color: '#1B3A5C', opacity: 0.75, borderColor: '#fff', borderWidth: 1 },
       markArea: {
         silent: false, 
-        label: { position: 'insideTopLeft', color: '#000', opacity: 0.5, fontSize: 14, fontWeight: 'bold' },
+        label: { position: 'insideTopLeft', color: '#222', opacity: 0.8, fontSize: 15, fontWeight: 'bold' },
         data: [
-          [{ xAxis: 50, yAxis: 50, itemStyle: { color: 'rgba(56, 142, 60, 0.1)' }, name: 'Образцовые' }, { xAxis: 100, yAxis: 100 }],
-          [{ xAxis: 0, yAxis: 50, itemStyle: { color: 'rgba(245, 124, 0, 0.1)' }, name: 'Непунктуальные' }, { xAxis: 50, yAxis: 100 }],
-          [{ xAxis: 50, yAxis: 0, itemStyle: { color: 'rgba(251, 192, 45, 0.1)' }, name: 'Слабые в освоении' }, { xAxis: 100, yAxis: 50 }],
-          [{ xAxis: 0, yAxis: 0, itemStyle: { color: 'rgba(211, 47, 47, 0.1)' }, name: 'Проблемные' }, { xAxis: 50, yAxis: 50 }]
+          [{ xAxis: 50, yAxis: 50, itemStyle: { color: 'rgba(46, 125, 50, 0.12)' }, name: 'Образцовые учреждения' }, { xAxis: 100, yAxis: 100 }],
+          [{ xAxis: 0, yAxis: 50, itemStyle: { color: 'rgba(230, 81, 0, 0.12)' }, name: 'Непунктуальные' }, { xAxis: 50, yAxis: 100 }],
+          [{ xAxis: 50, yAxis: 0, itemStyle: { color: 'rgba(251, 192, 45, 0.12)' }, name: 'Слабые в освоении бюджетных средств' }, { xAxis: 100, yAxis: 50 }],
+          [{ xAxis: 0, yAxis: 0, itemStyle: { color: 'rgba(211, 47, 47, 0.12)' }, name: 'Критическая зона риска' }, { xAxis: 50, yAxis: 50 }]
         ]
       }
     }]
@@ -382,30 +378,32 @@ const initScatter2x2 = () => {
     } else if (params.componentType === 'markArea') {
       const areaName = params.name
       const allData = chart.getOption().series[0].data || []
-      
-      // ИЗМЕНЕНО: Отсекаем фантомные организации (у которых 0 дисциплина, 0 исполнение и 0 бюджет)
       const isRealOrg = d => !(d[0] === 0 && d[1] === 0 && d[2] === 0);
       
       let filtered = []
-      if (areaName === 'Образцовые') filtered = allData.filter(d => d[0] >= 50 && d[1] >= 50 && isRealOrg(d))
-      else if (areaName === 'Безалаберные') filtered = allData.filter(d => d[0] < 50 && d[1] >= 50 && isRealOrg(d))
-      else if (areaName === 'Слабые в освоении') filtered = allData.filter(d => d[0] >= 50 && d[1] < 50 && isRealOrg(d))
-      else if (areaName === 'Проблемные') filtered = allData.filter(d => d[0] < 50 && d[1] < 50 && isRealOrg(d))
+      if (areaName.includes('Образцовые')) filtered = allData.filter(d => d[0] >= 50 && d[1] >= 50 && isRealOrg(d))
+      else if (areaName.includes('Непунктуальные')) filtered = allData.filter(d => d[0] < 50 && d[1] >= 50 && isRealOrg(d))
+      else if (areaName.includes('Слабые')) filtered = allData.filter(d => d[0] >= 50 && d[1] < 50 && isRealOrg(d))
+      else if (areaName.includes('Критическая')) filtered = allData.filter(d => d[0] < 50 && d[1] < 50 && isRealOrg(d))
 
       matrixAreaDialog.title = areaName
       matrixAreaDialog.orgs = filtered.map(d => ({ name: d[3], x: d[0], y: d[1] }))
       matrixAreaDialog.show = true
     }
   })
-
   return chart
 }
 
 const initRadar = () => {
   const chart = echarts.init(radarRef.value)
   chart.setOption({
-    tooltip: {}, legend: { data: ['Выбранный срез', 'Идеал'], bottom: 0 },
-    radar: { radius: '65%', indicator: [{ name: 'Дисциплина', max: 100 }, { name: 'Качество', max: 100 }, { name: 'Исполнение', max: 100 }, { name: 'Общий ИПО', max: 100 }] },
+    tooltip: { textStyle: { fontSize: 14 } }, 
+    legend: { data: ['Выбранный срез', 'Идеал'], bottom: 0, textStyle: { fontSize: 14, fontWeight: 'bold' } },
+    radar: { 
+      radius: '70%', 
+      nameTextStyle: { fontSize: 14, fontWeight: 'bold', color: '#333' },
+      indicator: [{ name: 'Дисциплина', max: 100 }, { name: 'Качество', max: 100 }, { name: 'Исполнение', max: 100 }, { name: 'Общий ИПО', max: 100 }] 
+    },
     series: [{ type: 'radar', data: [] }]
   })
   return chart
@@ -415,9 +413,12 @@ const initStackedBar = () => {
   const chart = echarts.init(stackRef.value)
   const dists = ['Тюмень г.', 'Тюменский', 'Тобольск г.', 'Ишим г.', 'Заводоуковский', 'Вагайский'].reverse()
   chart.setOption({
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } }, legend: { bottom: 0 },
-    grid: { left: '15%', right: '5%', top: '5%', bottom: '15%' },
-    xAxis: { type: 'value', max: 100, axisLabel: { formatter: '{value}%' } }, yAxis: { type: 'category', data: dists }, series: [] 
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, textStyle: { fontSize: 14 } }, 
+    legend: { bottom: 0, textStyle: { fontSize: 13, fontWeight: 'bold' } },
+    grid: { left: '15%', right: '6%', top: '5%', bottom: '15%', containLabel: true },
+    xAxis: { type: 'value', max: 100, axisLabel: { formatter: '{value}%', fontSize: 13, fontWeight: 'bold' } }, 
+    yAxis: { type: 'category', data: dists, axisLabel: { fontSize: 13, fontWeight: 'bold' } }, 
+    series: [] 
   })
   return chart
 }
@@ -425,24 +426,21 @@ const initStackedBar = () => {
 const initHeatmap = () => {
   const chart = echarts.init(heatmapRef.value)
   chart.setOption({
-    tooltip: { position: 'top', formatter: (p) => `<b>${chart.getOption().yAxis[0].data[p.data[1]]}</b><br/>${p.name}: <b>${p.data[2]}</b>` },
-    grid: { left: 180, right: 40, top: 50, bottom: 80 },
-    
-    // ДОБАВЛЕНЫ значки % в названия столбцов
-    xAxis: { type: 'category', data: ['Дисциплина (ρ), %', 'Качество (α), %', 'Исполнение (β), %', '% вовремя', '% плана', 'Организации'], position: 'top', axisLabel: { interval: 0, fontSize: 12 }, splitArea: { show: true } },
-    yAxis: { type: 'category', data: [], inverse: true, axisLabel: { interval: 0, fontSize: 11, width: 170, overflow: 'truncate' }, splitArea: { show: true } },
-    
+    tooltip: { position: 'top', textStyle: { fontSize: 14 }, formatter: (p) => `<b>${chart.getOption().yAxis[0].data[p.data[1]]}</b><br/>${p.name}: <b>${p.data[2]}%</b>` },
+    grid: { left: 220, right: 40, top: 70, bottom: 90 },
+    xAxis: { type: 'category', data: ['Дисциплина (ρ), %', 'Качество (α), %', 'Исполнение (β), %', '% вовремя', '% плана', 'Организации'], position: 'top', axisLabel: { interval: 0, fontSize: 13, fontWeight: 'bold' }, splitArea: { show: true } },
+    yAxis: { type: 'category', data: [], inverse: true, axisLabel: { interval: 0, fontSize: 13, fontWeight: 'bold', width: 200, overflow: 'truncate' }, splitArea: { show: true } },
     visualMap: {
       seriesIndex: 0,
       type: 'piecewise',
-      orient: 'horizontal', left: 'center', bottom: 0,
-      itemWidth: 15,
-      // ИСПРАВЛЕНЫ ОТТЕНКИ на более логичный и красивый градиент
+      orient: 'horizontal', left: 'center', bottom: 10,
+      itemWidth: 18, itemHeight: 14,
+      textStyle: { fontSize: 13, fontWeight: 'bold' },
       pieces: [
-        { min: 80, max: 100, label: '80-100% (Отлично)', color: '#2E7D32' }, // Темно-зеленый
-        { min: 60, max: 80, label: '60-80% (Хорошо)', color: '#81C784' },    // Светло-зеленый
-        { min: 40, max: 60, label: '40-60% (Риск)', color: '#FBC02D' },      // Желтый
-        { min: 0, max: 40, label: '0-40% (Критично)', color: '#D32F2F' }     // Красный
+        { min: 80, max: 100, label: '80-100% (Отлично)', color: '#2E7D32' }, 
+        { min: 60, max: 80, label: '60-80% (Хорошо)', color: '#81C784' },    
+        { min: 40, max: 60, label: '40-60% (Риск)', color: '#FBC02D' },      
+        { min: 0, max: 40, label: '0-40% (Критично)', color: '#D32F2F' }     
       ]
     },
     series: [] 

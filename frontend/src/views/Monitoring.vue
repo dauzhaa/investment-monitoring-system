@@ -1,6 +1,6 @@
 <template>
   <div class="monitoring">
-    <v-card class="stat-card pa-4 mb-5">
+    <v-card class="stat-card pa-4 mb-4">
       <v-row align="center" dense>
         <v-col cols="12" sm="3">
           <v-select v-model="selectedYear" :items="[2022, 2023, 2024, 2025]" label="Год" variant="outlined" density="compact" hide-details />
@@ -20,117 +20,127 @@
       </v-row>
     </v-card>
 
+    <div class="d-flex justify-end gap-2 mb-4">
+      <v-btn
+        variant="flat"
+        color="#D32F2F"
+        size="default"
+        prepend-icon="mdi-email-alert-outline"
+        @click="sendAllReminders"
+        :disabled="statusData.overdue === 0"
+        class="text-white font-weight-bold"
+        :class="{ 'btn-pulse': statusData.overdue > 0 }"
+      >
+        Напомнить всем ({{ statusData.overdue }})
+      </v-btn>
+      <v-btn variant="flat" color="#1B3A5C" size="default" class="text-white font-weight-bold" prepend-icon="mdi-download" @click="exportData">
+        Экспорт в Excel
+      </v-btn>
+    </div>
+
     <v-row class="mb-4">
-      <v-col cols="12" md="4">
+      <v-col cols="12" md="5">
         <v-card class="stat-card pa-4 h-100 d-flex flex-column align-center justify-center relative">
-          <div class="text-subtitle-1 font-weight-bold align-self-start w-100 mb-2" style="color: #1B3A5C">Прогресс сдачи</div>
-          <div style="height: 220px; width: 100%;">
+          <div class="text-h6 font-weight-bold align-self-start w-100 mb-2" style="color: #1B3A5C">Прогресс сдачи отчетности</div>
+          <div style="height: 250px; width: 100%;">
             <v-chart v-if="!loading" class="chart" :option="donutOption" autoresize />
-            <div v-else class="d-flex align-center justify-center h-100 text-grey">Загрузка...</div>
+            <div v-else class="d-flex align-center justify-center h-100 text-grey text-h6">Загрузка данных...</div>
           </div>
         </v-card>
       </v-col>
 
-      <v-col cols="12" md="8">
-        <v-row>
-          <v-col cols="6" sm="3">
-            <v-card class="stat-card pa-4 text-center h-100 d-flex flex-column justify-center">
-              <div class="text-h4 font-weight-bold" style="color: #1B3A5C">{{ statusData.total }}</div>
-              <div class="text-caption font-weight-medium text-grey-darken-1 mt-1">Всего организаций</div>
+      <v-col cols="12" md="7">
+        <v-row class="h-100" dense>
+          <v-col cols="6">
+            <v-card class="stat-card pa-4 text-center h-100 d-flex flex-column justify-center border-left-total">
+              <div class="text-h3 font-weight-bold" style="color: #1B3A5C">{{ statusData.total }}</div>
+              <div class="text-subtitle-1 font-weight-bold text-grey-darken-3 mt-1">Всего организаций</div>
             </v-card>
           </v-col>
-          <v-col cols="6" sm="3">
-            <v-card class="stat-card pa-4 text-center h-100 d-flex flex-column justify-center">
-              <div class="text-h4 font-weight-bold" style="color: #2E7D32">{{ statusData.submitted }}</div>
-              <div class="text-caption font-weight-medium text-grey-darken-1 mt-1">Сдано</div>
+          <v-col cols="6">
+            <v-card class="stat-card pa-4 text-center h-100 d-flex flex-column justify-center border-left-submitted">
+              <div class="text-h3 font-weight-bold" style="color: #2E7D32">{{ statusData.submitted }}</div>
+              <div class="text-subtitle-1 font-weight-bold text-grey-darken-3 mt-1">Сдано вовремя</div>
             </v-card>
           </v-col>
-          <v-col cols="6" sm="3">
-            <v-card class="stat-card pa-4 text-center h-100 d-flex flex-column justify-center">
-              <div class="text-h4 font-weight-bold" style="color: #D32F2F">{{ statusData.overdue }}</div>
-              <div class="text-caption font-weight-medium text-grey-darken-1 mt-1">Просрочено</div>
+          <v-col cols="6">
+            <v-card class="stat-card pa-4 text-center h-100 d-flex flex-column justify-center border-left-overdue">
+              <div class="text-h3 font-weight-bold" style="color: #D32F2F">{{ statusData.overdue }}</div>
+              <div class="text-subtitle-1 font-weight-bold text-grey-darken-3 mt-1">Просрочено</div>
             </v-card>
           </v-col>
-          <v-col cols="6" sm="3">
-            <v-card class="stat-card pa-4 text-center h-100 d-flex flex-column justify-center">
-              <div class="text-h4 font-weight-bold" style="color: #9E9E9E">{{ statusData.not_planned }}</div>
-              <div class="text-caption font-weight-medium text-grey-darken-1 mt-1">Не запланировано</div>
+          <v-col cols="6">
+            <v-card class="stat-card pa-4 text-center h-100 d-flex flex-column justify-center border-left-unplanned">
+              <div class="text-h3 font-weight-bold" style="color: #757575">{{ statusData.not_planned }}</div>
+              <div class="text-subtitle-1 font-weight-bold text-grey-darken-3 mt-1">Не запланировано</div>
             </v-card>
           </v-col>
         </v-row>
       </v-col>
     </v-row>
 
-    <div class="d-flex justify-end gap-2 mb-3">
-      <v-btn
-        variant="tonal"
-        color="#D32F2F"
-        size="small"
-        prepend-icon="mdi-email-alert-outline"
-        @click="sendAllReminders"
-        :disabled="statusData.overdue === 0"
-        :class="{ 'btn-pulse': statusData.overdue > 0 }"
-      >
-        Напомнить всем ({{ statusData.overdue }})
-      </v-btn>
-      <v-btn variant="tonal" color="#1B3A5C" size="small" prepend-icon="mdi-download" @click="exportData">
-        Экспорт в Excel
-      </v-btn>
-    </div>
-
     <v-card class="stat-card">
-      <v-text-field v-model="search" prepend-inner-icon="mdi-magnify" placeholder="Поиск по названию или ИНН..." variant="solo-filled" density="compact" flat hide-details class="ma-2" />
+      <v-row class="pa-3" align="center" dense>
+        <v-col cols="12" sm="7">
+          <v-text-field v-model="search" prepend-inner-icon="mdi-magnify" placeholder="Поиск по наименованию учреждения или ИНН..." variant="solo-filled" density="compact" flat hide-details />
+        </v-col>
+        <v-col cols="12" sm="5" class="d-flex align-center justify-end">
+          <span class="text-subtitle-2 text-grey-darken-2 mr-3 font-weight-bold">Показывать записей:</span>
+          <v-select v-model="itemsPerPage" :items="[10, 25, 50, 100, { title: 'Все', value: -1 }]" density="compact" variant="outlined" hide-details style="max-width: 130px;" />
+        </v-col>
+      </v-row>
+
       <v-data-table
         :headers="headers"
         :items="filteredItems"
         :search="search"
-        :items-per-page="25"
+        :items-per-page="itemsPerPage"
         :row-props="getRowProps"
-        density="compact"
+        density="default"
         hover
         class="monitoring-table"
       >
         <template #item.status="{ item }">
           <div class="d-flex align-center gap-2">
-            <v-icon size="10" :color="statusColor(item.status)">mdi-circle</v-icon>
-            <span class="text-body-2 font-weight-medium" :style="{ color: statusColor(item.status) }">{{ statusText(item.status) }}</span>
+            <v-icon size="12" :color="statusColor(item.status)">mdi-circle</v-icon>
+            <span class="text-subtitle-2 font-weight-bold" :style="{ color: statusColor(item.status) }">{{ statusText(item.status) }}</span>
           </div>
         </template>
 
         <template #item.is_smp="{ item }">
-          <v-icon v-if="item.is_smp" size="18" color="#2E7D32">mdi-check-circle</v-icon>
+          <v-icon v-if="item.is_smp" size="22" color="#2E7D32">mdi-check-circle</v-icon>
           <span v-else class="text-grey">—</span>
         </template>
 
         <template #item.actions="{ item }">
-          <v-btn v-if="item.status === 'overdue'" icon size="x-small" variant="text" color="#F57C00" @click="sendReminder(item)">
-            <v-icon>mdi-email-outline</v-icon>
-            <v-tooltip activator="parent" location="top">Напомнить</v-tooltip>
+          <v-btn v-if="item.status === 'overdue'" icon size="small" variant="text" color="#F57C00" @click="sendReminder(item)">
+            <v-icon size="22">mdi-email-outline</v-icon>
+            <v-tooltip activator="parent" location="top">Отправить уведомление</v-tooltip>
           </v-btn>
-          <v-btn v-if="item.status === 'submitted'" icon size="x-small" variant="text" color="#1B3A5C">
-            <v-icon>mdi-download</v-icon>
-            <v-tooltip activator="parent" location="top">Скачать отчёт</v-tooltip>
+          <v-btn v-if="item.status === 'submitted'" icon size="small" variant="text" color="#1B3A5C">
+            <v-icon size="22">mdi-download</v-icon>
+            <v-tooltip activator="parent" location="top">Скачать архив отчёта</v-tooltip>
           </v-btn>
         </template>
       </v-data-table>
     </v-card>
 
-    <v-dialog v-model="reminderDialog" max-width="500">
+    <v-dialog v-model="reminderDialog" max-width="550">
       <v-card class="stat-card pa-2">
         <v-card-title class="text-h6 font-weight-bold pt-4 px-4" style="color: #1B3A5C;">Отправка уведомления</v-card-title>
         <v-card-text class="px-4 pb-0">
-          <p class="mb-4 text-body-2 text-grey-darken-1">Кому: <strong style="color: #1A1A2E;">{{ selectedOrgForReminder?.name }}</strong></p>
-          <v-textarea v-model="reminderMessage" label="Текст уведомления" variant="outlined" auto-grow rows="4" color="#1B3A5C"></v-textarea>
+          <p class="mb-4 text-subtitle-1 text-grey-darken-3">Кому: <strong style="color: #1A1A2E;">{{ selectedOrgForReminder?.name }}</strong></p>
+          <v-textarea v-model="reminderMessage" label="Текст официального уведомления" variant="outlined" auto-grow rows="4" color="#1B3A5C"></v-textarea>
         </v-card-text>
         <v-card-actions class="px-4 pb-4">
           <v-spacer></v-spacer>
-          <v-btn variant="text" color="grey-darken-1" @click="reminderDialog = false" :disabled="isSendingReminder">Отмена</v-btn>
-          <v-btn color="#1B3A5C" variant="flat" :loading="isSendingReminder" @click="confirmSendReminder">Отправить</v-btn>
+          <v-btn variant="text" class="font-weight-bold" color="grey-darken-2" @click="reminderDialog = false" :disabled="isSendingReminder">Отмена</v-btn>
+          <v-btn color="#1B3A5C" class="font-weight-bold" variant="flat" :loading="isSendingReminder" @click="confirmSendReminder">Отправить</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <v-snackbar v-model="snackbar" :color="snackbarColor" timeout="3000">{{ snackbarText }}</v-snackbar>
+    <v-snackbar v-model="snackbar" :color="snackbarColor" timeout="3000" class="font-weight-bold">{{ snackbarText }}</v-snackbar>
   </div>
 </template>
 
@@ -151,6 +161,7 @@ const selectedDistricts = ref([])
 const loading = ref(false)
 const search = ref('')
 const districts = ref([])
+const itemsPerPage = ref(25)
 
 const snackbar = ref(false)
 const snackbarText = ref('')
@@ -165,49 +176,62 @@ const quarterOptions = [
 
 const statusData = ref({ total: 0, submitted: 0, overdue: 0, not_planned: 0, percent: 0, items: [] })
 
+// Конфигурация Пай-чарта адаптирована под экран проектора
 const donutOption = computed(() => ({
   title: {
     text: `${statusData.value.percent}%`,
-    left: 'center',
+    left: '32%',
     top: 'center',
-    textStyle: { fontSize: 26, fontWeight: 'bold', color: statusData.value.percent >= 80 ? '#2E7D32' : '#F57C00' }
+    textStyle: { fontSize: 32, fontWeight: 'bold', color: statusData.value.percent >= 80 ? '#2E7D32' : '#F57C00' }
   },
-  tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
-  legend: { bottom: 0, left: 'center', itemWidth: 10, itemHeight: 10 },
+  tooltip: { 
+    trigger: 'item', 
+    formatter: '{b}: <b>{c}</b> ({d}%)',
+    textStyle: { fontSize: 14 }
+  },
+  legend: { 
+    right: '5%', 
+    top: 'center', 
+    orient: 'vertical',
+    itemGap: 16, 
+    itemWidth: 14, 
+    itemHeight: 14,
+    textStyle: { fontSize: 14, fontWeight: 'bold', color: '#333' }
+  },
   series: [
     {
       type: 'pie',
-      radius: ['55%', '80%'], // Кольцо
+      radius: ['55%', '82%'],
+      center: ['35%', '50%'],
       avoidLabelOverlap: false,
-      itemStyle: { borderRadius: 4, borderColor: '#fff', borderWidth: 2 },
+      itemStyle: { borderRadius: 5, borderColor: '#fff', borderWidth: 2 },
       label: { show: false },
       data: [
         { value: statusData.value.submitted, name: 'Сдано', itemStyle: { color: '#2E7D32' } },
-        { value: statusData.value.overdue, name: 'Проср.', itemStyle: { color: '#D32F2F' } },
-        { value: statusData.value.not_planned, name: 'Не запл.', itemStyle: { color: '#9E9E9E' } }
+        { value: statusData.value.overdue, name: 'Просрочено', itemStyle: { color: '#D32F2F' } },
+        { value: statusData.value.not_planned, name: 'Не запланировано', itemStyle: { color: '#9E9E9E' } }
       ]
     }
   ]
 }))
 
 const headers = [
-  { title: '№', key: 'index', width: '50px', sortable: false },
-  { title: 'Организация', key: 'name', width: '35%' },
-  { title: 'ИНН', key: 'inn', width: '120px' },
+  { title: '№', key: 'index', width: '60px', sortable: false },
+  { title: 'Организация', key: 'name', width: '40%' },
+  { title: 'ИНН', key: 'inn', width: '130px' },
   { title: 'Район', key: 'district' },
-  { title: 'СМП', key: 'is_smp', width: '60px', align: 'center' },
-  { title: 'Статус', key: 'status', width: '140px' },
-  { title: '', key: 'actions', width: '80px', sortable: false },
+  { title: 'СМП', key: 'is_smp', width: '70px', align: 'center' },
+  { title: 'Статус сдачи', key: 'status', width: '150px' },
+  { title: 'Действия', key: 'actions', width: '100px', sortable: false, align: 'center' },
 ]
 
 const filteredItems = computed(() => (statusData.value.items || []).map((item, i) => ({ ...item, index: i + 1 })))
 
-function statusColor(s) { return { submitted: '#2E7D32', overdue: '#D32F2F', not_planned: '#9E9E9E' }[s] || '#9E9E9E' }
+function statusColor(s) { return { submitted: '#2E7D32', overdue: '#D32F2F', not_planned: '#757575' }[s] || '#757575' }
 function statusText(s) { return { submitted: 'Сдан', overdue: 'Просрочен', not_planned: 'Не запл.' }[s] || s }
 
-// Hover-классы для строк
 function getRowProps({ item }) {
-  return { class: `row-status-${item.status}` }
+  return { class: `row-status-${item.status} text-body-1` }
 }
 
 async function loadDistricts() {
@@ -287,18 +311,32 @@ onMounted(() => { loadDistricts(); loadStatus() })
 .gap-2 { gap: 8px; }
 .chart { width: 100%; height: 100%; }
 
-/* Цветовые ховеры для строк */
-.monitoring-table :deep(.row-status-submitted:hover) { background-color: rgba(46, 125, 50, 0.05) !important; }
-.monitoring-table :deep(.row-status-overdue:hover) { background-color: rgba(211, 47, 47, 0.05) !important; }
-.monitoring-table :deep(.row-status-not_planned:hover) { background-color: rgba(158, 158, 158, 0.05) !important; }
+/* Левые цветные маркеры на карточках KPI для лучшей считываемости */
+.border-left-total { border-left: 6px solid #1B3A5C !important; }
+.border-left-submitted { border-left: 6px solid #2E7D32 !important; }
+.border-left-overdue { border-left: 6px solid #D32F2F !important; }
+.border-left-unplanned { border-left: 6px solid #757575 !important; }
 
-/* Пульсация кнопки */
+.monitoring-table :deep(.v-data-table-header th) {
+  font-size: 14px !important;
+  font-weight: bold !important;
+  background-color: #F8F9FA !important;
+}
+
+.monitoring-table :deep(.v-data-table__tr) {
+  font-size: 14px !important;
+}
+
+.monitoring-table :deep(.row-status-submitted:hover) { background-color: rgba(46, 125, 50, 0.07) !important; }
+.monitoring-table :deep(.row-status-overdue:hover) { background-color: rgba(211, 47, 47, 0.07) !important; }
+.monitoring-table :deep(.row-status-not_planned:hover) { background-color: rgba(117, 117, 117, 0.07) !important; }
+
 .btn-pulse {
   animation: pulse-red 2s infinite;
 }
 @keyframes pulse-red {
-  0% { box-shadow: 0 0 0 0 rgba(211, 47, 47, 0.5); }
-  70% { box-shadow: 0 0 0 8px rgba(211, 47, 47, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(211, 47, 47, 0.6); }
+  70% { box-shadow: 0 0 0 10px rgba(211, 47, 47, 0); }
   100% { box-shadow: 0 0 0 0 rgba(211, 47, 47, 0); }
 }
 </style>
