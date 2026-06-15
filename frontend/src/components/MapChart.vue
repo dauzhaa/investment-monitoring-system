@@ -75,30 +75,31 @@ const getAggregatedData = () => {
 };
 
 /* ── Рассчитать пороги visualMap по квантилям ── */
+const getNiceMax = (max) => {
+  if (max <= 0) return 100;
+  const power = Math.floor(Math.log10(max));
+  const magnitude = Math.pow(10, power);
+  return Math.ceil(max / magnitude) * magnitude;
+};
+
 const buildPieces = (mapData) => {
-  const values = mapData.map(d => d.value).filter(v => v > 0).sort((a, b) => a - b);
+  const values = mapData.map(d => d.value).filter(v => v > 0);
+  const maxVal = values.length ? Math.max(...values) : 0;
+  
+  const niceMax = getNiceMax(maxVal);
+  const step = niceMax / 5; // 5 диапазонов
   const colors = ['#B2DFDB', '#80CBC4', '#4DB6AC', '#00897B', '#004D40'];
-
-  if (values.length === 0) {
-    return [{ min: 0, max: 1, color: colors[0] }];
-  }
-  if (values.length < 3) {
-    return [{ min: 0, max: Math.max(...values) + 1, color: colors[2] }];
-  }
-
-  // Квантили: 20 / 40 / 60 / 80 — дают 5 корзин
-  const quantile = (arr, q) => arr[Math.min(Math.floor(arr.length * q), arr.length - 1)];
-  const raw = [0, quantile(values, 0.2), quantile(values, 0.4), quantile(values, 0.6), quantile(values, 0.8), values[values.length - 1] + 1];
-
-  // Убрать дубликаты (если данные очень однородные)
-  const thresholds = [...new Set(raw)].sort((a, b) => a - b);
-
+  
   const pieces = [];
-  for (let i = 0; i < thresholds.length - 1; i++) {
+  for (let i = 0; i < 5; i++) {
+    const min = i * step;
+    const max = (i + 1) * step;
+    
     pieces.push({
-      min: thresholds[i],
-      max: thresholds[i + 1] - (i < thresholds.length - 2 ? 0.01 : 0),
-      color: colors[Math.min(i, colors.length - 1)]
+      min: min,
+      max: max,
+      label: `${formatMoney(min)} – ${formatMoney(max)}`,
+      color: colors[i]
     });
   }
   return pieces;
@@ -133,7 +134,6 @@ const initChart = () => {
     visualMap: {
       type: 'piecewise',
       pieces: buildPieces(mapData),
-      text: ['Высокие', 'Низкие'],
       orient: 'vertical',
       left: 20,
       bottom: 20,

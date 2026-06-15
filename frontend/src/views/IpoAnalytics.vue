@@ -54,7 +54,7 @@
       <v-row align="center" dense>
         <v-col cols="12" md="3">
           <div class="d-flex align-center mb-1">
-            <h2 class="text-h4 font-weight-bold text-blue-darken-4 mb-0">Центр ИПО</h2>
+            <h2 class="text-h4 font-weight-bold text-blue-darken-4 mb-0">Индекс Поведения Организации (ИПО)</h2>
             <v-tooltip text="Индекс Поведения Организации: учитывает дисциплину, качество и процент исполнения бюджета" location="bottom">
               <template v-slot:activator="{ props }"><v-icon v-bind="props" color="grey-darken-1" size="small" class="ml-2 cursor-pointer">mdi-help-circle-outline</v-icon></template>
             </v-tooltip>
@@ -215,8 +215,28 @@ const fetchData = async () => {
       charts.value.radar.setOption({
         series: [{
           data: [
-            { value: data.radar, name: 'Выбранный срез', itemStyle: { color: '#2E7D32' }, areaStyle: { color: 'rgba(46, 125, 50, 0.45)' }, lineStyle: { color: '#2E7D32', width: 3 } },
-            { value: [100, 100, 100, 100], name: 'Идеал', itemStyle: { color: '#757575' }, areaStyle: { color: 'transparent' }, lineStyle: { type: 'dashed', color: '#757575', width: 2 } }
+            { 
+              value: data.radar, 
+              name: 'Выбранный срез', 
+              itemStyle: { color: '#2E7D32' }, 
+              areaStyle: { color: 'rgba(46, 125, 50, 0.45)' }, 
+              lineStyle: { color: '#2E7D32', width: 3 } 
+            },
+            { 
+              value: [100, 100, 100, 100], 
+              name: 'Идеал', 
+              itemStyle: { color: '#3949AB' }, // Контрастный Индиго
+              areaStyle: { color: 'transparent' }, 
+              lineStyle: { type: 'dashed', color: '#3949AB', width: 2 },
+              label: { 
+                show: true, 
+                formatter: '{c}', 
+                color: '#3949AB', 
+                fontSize: 13, 
+                fontWeight: 'bold',
+                distance: 5
+              }
+            }
           ]
         }]
       })
@@ -437,10 +457,10 @@ const initHeatmap = () => {
       itemWidth: 18, itemHeight: 14,
       textStyle: { fontSize: 13, fontWeight: 'bold' },
       pieces: [
-        { min: 80, max: 100, label: '80-100% (Отлично)', color: '#2E7D32' }, 
-        { min: 60, max: 80, label: '60-80% (Хорошо)', color: '#81C784' },    
-        { min: 40, max: 60, label: '40-60% (Риск)', color: '#FBC02D' },      
-        { min: 0, max: 40, label: '0-40% (Критично)', color: '#D32F2F' }     
+        { min: 80, max: 100, label: '80-100% (Отлично)', color: '#C8E6C9' },  // Мягкий зеленый
+        { min: 60, max: 80, label: '60-80% (Хорошо)', color: '#E6EE9C' },   // Светло-салатовый
+        { min: 40, max: 60, label: '40-60% (Риск)', color: '#FFE082' },     // Мягкий янтарный
+        { min: 0, max: 40, label: '0-40% (Критично)', color: '#EF9A9A' }    // Мягкий красный
       ]
     },
     series: [] 

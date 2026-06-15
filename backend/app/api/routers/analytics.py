@@ -118,25 +118,48 @@ async def get_analytics_trends(
     end_year: int = Query(default=2026),
     db: AsyncSession = Depends(get_db)
 ):
-    years_res = await db.execute(select(func.distinct(InvestmentFact.year)))
-    all_years = sorted([y[0] for y in years_res.all() if y[0] is not None])
+    years_res = await db.execute(
+        select(func.distinct(InvestmentFact.year))
+        .where(InvestmentFact.year.isnot(None))
+    )
+    all_years = sorted([y[0] for y in years_res.all()])
+    
+    # 1. Агрегация факта (Решение проблемы N+1 и защита от дублей загрузок)
+    # Берем максимальный amount по организации за каждый год
+    f_subq = (
+        select(InvestmentFact.year, InvestmentFact.organization_id, func.max(InvestmentFact.amount).label("max_amount"))
+        .group_by(InvestmentFact.year, InvestmentFact.organization_id)
+        .subquery()
+    )
+    f_stmt = select(f_subq.c.year, func.sum(f_subq.c.max_amount).label("total")).group_by(f_subq.c.year)
+    fact_dict = {row.year: float(row.total or 0) for row in (await db.execute(f_stmt)).all()}
+    
+    # 2. Агрегация плана (Строго берем последнюю загрузку плана - max_id по организации)
+    p_subq = (
+        select(InvestmentForecast.year, InvestmentForecast.organization_id, func.max(InvestmentForecast.id).label("mid"))
+        .group_by(InvestmentForecast.year, InvestmentForecast.organization_id)
+        .subquery()
+    )
+    p_stmt = (
+        select(p_subq.c.year, func.sum(InvestmentForecast.forecast_amount).label("total"))
+        .select_from(p_subq)
+        .join(InvestmentForecast, InvestmentForecast.id == p_subq.c.mid)
+        .group_by(p_subq.c.year)
+    )
+    plan_dict = {row.year: float(row.total or 0) for row in (await db.execute(p_stmt)).all()}
     
     history = []
     forecast_data = []
     
     for y in all_years:
-        f_subq = select(func.max(InvestmentFact.amount).label("max_amount")).where(InvestmentFact.year == y).group_by(InvestmentFact.organization_id).subquery()
-        f_res = await db.execute(select(func.sum(f_subq.c.max_amount)))
-        fact_sum = float(f_res.scalar() or 0)
-        
-        p_subq = select(func.max(InvestmentForecast.id).label("mid")).where(InvestmentForecast.year == y).group_by(InvestmentForecast.organization_id).subquery()
-        p_res = await db.execute(select(func.sum(InvestmentForecast.forecast_amount)).join(p_subq, InvestmentForecast.id == p_subq.c.mid))
-        plan_sum = float(p_res.scalar() or 0)
+        fact_sum = fact_dict.get(y, 0.0)
+        plan_sum = plan_dict.get(y, 0.0)
         
         history.append({"year": y, "amount": fact_sum, "forecast": plan_sum})
         if y >= start_year:
             forecast_data.append({"year": y, "amount": plan_sum})
 
+    # Отрисовка карты
     map_data = await get_map_data(start_year, end_year, db)
     rating = sorted(map_data, key=lambda x: x['value'], reverse=True)[:5]
 
@@ -155,22 +178,42 @@ async def get_quarterly_data(
 ):
     quarters_data = []
     
-    # План за период
-    plan_subq = select(InvestmentForecast.organization_id, InvestmentForecast.year, func.max(InvestmentForecast.id).label("mid")).where(
-        InvestmentForecast.year >= start_year, InvestmentForecast.year <= end_year
-    ).group_by(InvestmentForecast.organization_id, InvestmentForecast.year).subquery()
+    # 1. План за период (строгая дедупликация через max(id) для надежности)
+    plan_subq = (
+        select(InvestmentForecast.organization_id, InvestmentForecast.year, func.max(InvestmentForecast.id).label("mid"))
+        .where(InvestmentForecast.year >= start_year, InvestmentForecast.year <= end_year)
+        .group_by(InvestmentForecast.organization_id, InvestmentForecast.year)
+        .subquery()
+    )
     
-    plan_res = await db.execute(select(func.sum(InvestmentForecast.forecast_amount)).join(plan_subq, InvestmentForecast.id == plan_subq.c.mid))
+    plan_stmt = (
+        select(func.sum(InvestmentForecast.forecast_amount))
+        .select_from(plan_subq)
+        .join(InvestmentForecast, InvestmentForecast.id == plan_subq.c.mid)
+    )
+    plan_res = await db.execute(plan_stmt)
     plan_total = float(plan_res.scalar() or 0)
-    plan_per_quarter = plan_total / 4 if plan_total > 0 else 0
+    
+    # ИСПРАВЛЕНИЕ: распределяем план на 4 квартала с учетом количества выбранных лет
+    years_count = max(1, end_year - start_year + 1)
+    plan_per_quarter = plan_total / (4 * years_count) if plan_total > 0 else 0
 
+    # 2. Факт по кварталам
     for q in [1, 2, 3, 4]:
-        stmt = select(func.sum(InvestmentFact.amount)).where(
-            InvestmentFact.year >= start_year,
-            InvestmentFact.year <= end_year,
-            InvestmentFact.quarter == q
+        # Защита от суммирования дублей отчетов: берем max(amount) внутри каждого квартала
+        fact_subq = (
+            select(InvestmentFact.organization_id, InvestmentFact.year, func.max(InvestmentFact.amount).label("max_amount"))
+            .where(
+                InvestmentFact.year >= start_year,
+                InvestmentFact.year <= end_year,
+                InvestmentFact.quarter == q
+            )
+            .group_by(InvestmentFact.organization_id, InvestmentFact.year)
+            .subquery()
         )
-        res = await db.execute(stmt)
+        
+        fact_stmt = select(func.sum(fact_subq.c.max_amount))
+        res = await db.execute(fact_stmt)
         fact_sum = float(res.scalar() or 0)
         
         quarters_data.append({"quarter": q, "fact": fact_sum, "plan": plan_per_quarter})
