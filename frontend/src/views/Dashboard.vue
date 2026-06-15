@@ -193,7 +193,11 @@ function formatMoney(val) {
 
 // 1. Area Chart (Динамика)
 const areaOption = computed(() => {
-  const xData = trends.value.history?.map(d => d.year) || []
+  // НОВОЕ: фильтруем пустые года (где и факт, и план равны 0)
+  const validHistory = (trends.value.history || []).filter(d => (d.amount || 0) > 0 || (d.forecast || 0) > 0);
+  
+  const xData = validHistory.map(d => d.year);
+  
   return {
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, valueFormatter: (value) => formatMoney(value) + ' тыс. ₽' },
     legend: { data: ['Факт', 'План'], top: 0, left: 'center' },
@@ -204,12 +208,12 @@ const areaOption = computed(() => {
       {
         name: 'Факт', type: 'bar',
         itemStyle: { color: '#2E7D32', borderRadius: [4, 4, 0, 0] },
-        data: trends.value.history?.map(d => d.amount) || []
+        data: validHistory.map(d => d.amount) // Используем отфильтрованный массив
       },
       {
         name: 'План', type: 'bar',
         itemStyle: { color: '#F57C00', borderRadius: [4, 4, 0, 0] },
-        data: trends.value.history?.map(d => d.forecast) || []
+        data: validHistory.map(d => d.forecast) // Используем отфильтрованный массив
       }
     ]
   }

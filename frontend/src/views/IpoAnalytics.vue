@@ -225,16 +225,17 @@ const fetchData = async () => {
             { 
               value: [100, 100, 100, 100], 
               name: 'Идеал', 
+              symbol: 'none', // <--- ВОТ ЭТО УБИРАЕТ ТОЧКИ НА УГЛАХ (кружки)
               itemStyle: { color: '#3949AB' }, 
               areaStyle: { color: 'transparent' }, 
               lineStyle: { type: 'dashed', color: '#3949AB', width: 2 },
               label: { 
-                show: true, 
+                show: true, // Оставляем значения
                 formatter: '{c}', 
                 color: '#3949AB', 
                 fontSize: 13, 
                 fontWeight: 'bold',
-                distance: -16 // Отрицательное значение тянет цифру внутрь
+                distance: -16 // Сдвигает цифры "100" внутрь ромба
               }
             }
           ]

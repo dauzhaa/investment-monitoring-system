@@ -177,15 +177,8 @@ const quarterOptions = [
 const statusData = ref({ total: 0, submitted: 0, overdue: 0, not_planned: 0, percent: 0, items: [] })
 
 // Конфигурация Пай-чарта адаптирована под экран проектора
+// Конфигурация Пай-чарта адаптирована под экран проектора
 const donutOption = computed(() => ({
-  title: {
-    text: `${statusData.value.percent}%`,
-    left: '40%',
-    top: 'center',
-    textAlign: 'center',
-    textVerticalAlign: 'middle',
-    textStyle: { fontSize: 32, fontWeight: 'bold', color: statusData.value.percent >= 80 ? '#2E7D32' : '#F57C00' }
-  },
   tooltip: { 
     trigger: 'item', 
     formatter: '{b}: <b>{c}</b> ({d}%)',
@@ -204,10 +197,25 @@ const donutOption = computed(() => ({
     {
       type: 'pie',
       radius: ['55%', '82%'],
-      center: ['35%', '50%'],
+      center: ['35%', '50%'], // Центр пирога
       avoidLabelOverlap: false,
       itemStyle: { borderRadius: 5, borderColor: '#fff', borderWidth: 2 },
-      label: { show: false },
+      
+      // НОВОЕ: Процент выводится прямо в центре серии, title больше не нужен
+      label: {
+        show: true,
+        position: 'center',
+        formatter: `${statusData.value.percent}%`,
+        fontSize: 32,
+        fontWeight: 'bold',
+        color: statusData.value.percent >= 80 ? '#2E7D32' : '#F57C00'
+      },
+      labelLine: {
+        show: false
+      },
+      emphasis: {
+        label: { show: true }
+      },
       data: [
         { value: statusData.value.submitted, name: 'Сдано', itemStyle: { color: '#2E7D32' } },
         { value: statusData.value.overdue, name: 'Просрочено', itemStyle: { color: '#D32F2F' } },
