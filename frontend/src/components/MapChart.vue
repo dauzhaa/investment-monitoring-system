@@ -12,8 +12,9 @@ import tyumenGeoJson from '@/assets/tyumen_districts.json';
 
 const props = defineProps({
   data: { type: Array, default: () => [] },
+  startYear: { type: Number, default: 2022 }, // НОВОЕ
+  endYear: { type: Number, default: 2025 }    // НОВОЕ
 });
-
 const emit = defineEmits(['district-click']);
 const router = useRouter(); 
 
@@ -83,23 +84,40 @@ const getNiceMax = (max) => {
 };
 
 const buildPieces = (mapData) => {
-  const values = mapData.map(d => d.value).filter(v => v > 0);
-  const maxVal = values.length ? Math.max(...values) : 0;
-  
-  const niceMax = getNiceMax(maxVal);
-  const step = niceMax / 5; // 5 диапазонов
+  const values = mapData.map(d => d.value).filter(v => v > 0).sort((a, b) => a - b);
   const colors = ['#B2DFDB', '#80CBC4', '#4DB6AC', '#00897B', '#004D40'];
-  
+
+  if (values.length === 0) {
+    return [{ min: 0, max: 1, color: colors[0], label: 'Нет данных' }];
+  }
+  if (values.length < 3) {
+    return [{ min: 0, max: Math.max(...values) + 1, color: colors[2], label: `0 – ${formatMoney(Math.max(...values))}` }];
+  }
+
+  // Квантили: 20 / 40 / 60 / 80
+  const quantile = (arr, q) => arr[Math.min(Math.floor(arr.length * q), arr.length - 1)];
+  const raw = [
+    0, 
+    quantile(values, 0.2), 
+    quantile(values, 0.4), 
+    quantile(values, 0.6), 
+    quantile(values, 0.8), 
+    values[values.length - 1] + 1
+  ];
+
+  // Убираем дубликаты
+  const thresholds = [...new Set(raw)].sort((a, b) => a - b);
+
   const pieces = [];
-  for (let i = 0; i < 5; i++) {
-    const min = i * step;
-    const max = (i + 1) * step;
+  for (let i = 0; i < thresholds.length - 1; i++) {
+    const min = thresholds[i];
+    const max = thresholds[i + 1] - (i < thresholds.length - 2 ? 0.01 : 0);
     
     pieces.push({
       min: min,
       max: max,
-      label: `${formatMoney(min)} – ${formatMoney(max)}`,
-      color: colors[i]
+      color: colors[Math.min(i, colors.length - 1)],
+      label: `${formatMoney(min)} – ${formatMoney(max)}` // Подпись с реальными числами
     });
   }
   return pieces;
@@ -179,7 +197,11 @@ const initChart = () => {
     const actualName = params.data?.originalName ? params.data.originalName.split(' + ')[0] : params.name;
     if (params.componentType === 'series' && actualName) {
       emit('district-click', actualName);
-      router.push({ name: 'DistrictDetail', params: { name: actualName } });
+      router.push({ 
+        name: 'DistrictDetail', 
+        params: { name: actualName },
+        query: { start_year: props.startYear, end_year: props.endYear } // Передаем диапазон в URL
+      });
     }
   });
 

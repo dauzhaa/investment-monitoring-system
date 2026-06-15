@@ -225,7 +225,7 @@ const fetchData = async () => {
             { 
               value: [100, 100, 100, 100], 
               name: 'Идеал', 
-              itemStyle: { color: '#3949AB' }, // Контрастный Индиго
+              itemStyle: { color: '#3949AB' }, 
               areaStyle: { color: 'transparent' }, 
               lineStyle: { type: 'dashed', color: '#3949AB', width: 2 },
               label: { 
@@ -234,7 +234,7 @@ const fetchData = async () => {
                 color: '#3949AB', 
                 fontSize: 13, 
                 fontWeight: 'bold',
-                distance: 5
+                distance: -16 // Отрицательное значение тянет цифру внутрь
               }
             }
           ]
@@ -420,7 +420,7 @@ const initRadar = () => {
     tooltip: { textStyle: { fontSize: 14 } }, 
     legend: { data: ['Выбранный срез', 'Идеал'], bottom: 0, textStyle: { fontSize: 14, fontWeight: 'bold' } },
     radar: { 
-      radius: '70%', 
+      radius: '56%', 
       nameTextStyle: { fontSize: 14, fontWeight: 'bold', color: '#333' },
       indicator: [{ name: 'Дисциплина', max: 100 }, { name: 'Качество', max: 100 }, { name: 'Исполнение', max: 100 }, { name: 'Общий ИПО', max: 100 }] 
     },

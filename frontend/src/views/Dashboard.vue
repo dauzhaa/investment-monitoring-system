@@ -62,7 +62,7 @@
       <v-col cols="12">
         <v-card class="stat-card pa-5" style="height: 550px">
           <div class="text-subtitle-1 font-weight-bold mb-4" style="color: #1B3A5C">Инвестиционная карта районов</div>
-          <MapChart v-if="mapData.length" :data="mapData" @district-click="handleMapClick" />
+          <MapChart v-if="mapData.length" :data="mapData" :start-year="startYear" :end-year="endYear" @district-click="handleMapClick" />
           <div v-else class="d-flex align-center justify-center h-100 text-grey">Загрузка карты...</div>
         </v-card>
       </v-col>

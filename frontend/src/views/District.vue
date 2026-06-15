@@ -9,7 +9,10 @@
         {{ districtData.district?.name || 'Загрузка...' }}
       </v-card-title>
       <v-card-subtitle class="text-subtitle-1">
-        Зарегистрировано организаций: {{ districtData.district?.organizations_count || 0 }}
+        Зарегистрировано организаций: {{ districtData.district?.organizations_count || 0 }} 
+        <span class="ml-4 font-weight-bold" style="color: #F57C00;">
+          Период: {{ route.query.start_year || 2022 }} — {{ route.query.end_year || 2025 }} гг.
+        </span>
       </v-card-subtitle>
     </v-card>
 
@@ -131,13 +134,20 @@ const getExecutionColor = (item) => {
 onMounted(async () => {
   try {
     const districtName = route.params.name;
-    const response = await axios.get(`/api/v1/districts/${encodeURIComponent(districtName)}`);
+    // Считываем годы из URL (дефолт 2022-2025 если зашли по прямой ссылке)
+    const startYear = route.query.start_year || 2022;
+    const endYear = route.query.end_year || 2025;
+
+    // Шлём их на бэкенд
+    const response = await axios.get(`/api/v1/districts/${encodeURIComponent(districtName)}`, {
+      params: { start_year: startYear, end_year: endYear }
+    });
+    
     districtData.value = response.data;
 
     const years = districtData.value.history.map(h => h.year.toString());
     const factAmounts = districtData.value.history.map(h => h.amount);
-    // Извлекаем План (forecast). Если его нет, ставим 0 или null
-    const planAmounts = districtData.value.history.map(h => h.forecast || null); 
+    const planAmounts = districtData.value.history.map(h => h.forecast || null);
 
     historyChartOption.value = {
       tooltip: {

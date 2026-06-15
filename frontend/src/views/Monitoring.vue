@@ -180,8 +180,10 @@ const statusData = ref({ total: 0, submitted: 0, overdue: 0, not_planned: 0, per
 const donutOption = computed(() => ({
   title: {
     text: `${statusData.value.percent}%`,
-    left: '32%',
+    left: '40%',
     top: 'center',
+    textAlign: 'center',
+    textVerticalAlign: 'middle',
     textStyle: { fontSize: 32, fontWeight: 'bold', color: statusData.value.percent >= 80 ? '#2E7D32' : '#F57C00' }
   },
   tooltip: { 
