@@ -146,8 +146,8 @@
     <v-row class="mb-4" dense>
       <v-col cols="12">
         <v-card elevation="2" class="rounded-lg">
-          <v-card-title class="text-h6 font-weight-bold pa-4">Детальная матрица компонентов ИПО учреждений региона</v-card-title>
-          <v-card-text><div ref="heatmapRef" :style="{ height: heatmapHeight + 'px', width: '100%' }"></div></v-card-text>
+          <v-card-title class="text-h5 font-weight-bold px-4 pt-4 pb-0">Детальная матрица компонентов ИПО учреждений региона</v-card-title>
+          <v-card-text class="px-4 pt-2 pb-4"><div ref="heatmapRef" :style="{ height: heatmapHeight + 'px', width: '100%' }"></div></v-card-text>
         </v-card>
       </v-col>
     </v-row>
@@ -256,7 +256,6 @@ const fetchData = async () => {
       const keep = cats.map((n, i) => (isBad(n) ? -1 : i)).filter(i => i >= 0)
       const newCats = keep.map(i => cats[i])
       
-      // Переименовываем "Безалаберные" в "Непунктуальные"
       const newSeries = data.stack.series.map(s => {
         let newName = s.name;
         if (s.name === 'Безалаберные') {
@@ -289,8 +288,8 @@ const fetchData = async () => {
         else { remap[i] = names.length; names.push(n) }
       })
 
-      // Шаг увеличен до 48px под крупный шрифт на проекторе
-      heatmapHeight.value = Math.max(450, names.length * 48 + 160)
+      // Снизили прибавку со 160 до 130, т.к. мы уменьшили отступ сверху
+      heatmapHeight.value = Math.max(450, names.length * 48 + 130)
       await nextTick()
       charts.value.heatmap.resize()
 
@@ -463,7 +462,8 @@ const initHeatmap = () => {
   const chart = echarts.init(heatmapRef.value)
   chart.setOption({
     tooltip: { position: 'top', textStyle: { fontSize: 16 }, formatter: (p) => `<b>${chart.getOption().yAxis[0].data[p.data[1]]}</b><br/>${p.name}: <b>${p.data[2]}%</b>` },
-    grid: { left: 260, right: 40, top: 70, bottom: 90 },
+    // Уменьшили top до 40, чтобы матрица стояла плотнее к заголовку
+    grid: { left: 260, right: 40, top: 40, bottom: 90 },
     xAxis: { type: 'category', data: ['Дисциплина (ρ), %', 'Качество (α), %', 'Исполнение (β), %', '% вовремя', '% плана', 'Организации'], position: 'top', axisLabel: { interval: 0, fontSize: 16, fontWeight: 'bold' }, splitArea: { show: true } },
     yAxis: { type: 'category', data: [], inverse: true, axisLabel: { interval: 0, fontSize: 16, fontWeight: 'bold', width: 240, overflow: 'truncate' }, splitArea: { show: true } },
     visualMap: {
