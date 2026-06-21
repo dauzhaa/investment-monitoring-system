@@ -225,17 +225,17 @@ const fetchData = async () => {
             { 
               value: [100, 100, 100, 100], 
               name: 'Идеал', 
-              symbol: 'none', // <--- ВОТ ЭТО УБИРАЕТ ТОЧКИ НА УГЛАХ (кружки)
+              symbol: 'none', 
               itemStyle: { color: '#3949AB' }, 
               areaStyle: { color: 'transparent' }, 
               lineStyle: { type: 'dashed', color: '#3949AB', width: 2 },
               label: { 
-                show: true, // Оставляем значения
+                show: true, 
                 formatter: '{c}', 
                 color: '#3949AB', 
                 fontSize: 13, 
                 fontWeight: 'bold',
-                distance: -16 // Сдвигает цифры "100" внутрь ромба
+                distance: -16 
               }
             }
           ]
@@ -274,8 +274,8 @@ const fetchData = async () => {
         else { remap[i] = names.length; names.push(n) }
       })
 
-      // Шаг увеличен до 38px под крупный шрифт на проекторе
-      heatmapHeight.value = Math.max(450, names.length * 38 + 160)
+      // Шаг увеличен до 48px под крупный шрифт на проекторе
+      heatmapHeight.value = Math.max(450, names.length * 48 + 160)
       await nextTick()
       charts.value.heatmap.resize()
 
@@ -290,10 +290,10 @@ const fetchData = async () => {
       });
 
       charts.value.heatmap.setOption({
-        yAxis: { data: names, axisLabel: { interval: 0, fontSize: 13, fontWeight: 'bold', width: 200, overflow: 'truncate', formatter: highlightFormatter, rich: { active: { color: '#1B3A5C', fontWeight: 'bold' } } } },
+        yAxis: { data: names, axisLabel: { interval: 0, fontSize: 16, fontWeight: 'bold', width: 240, overflow: 'truncate', formatter: highlightFormatter, rich: { active: { color: '#1B3A5C', fontWeight: 'bold', fontSize: 16 } } } },
         series: [
-          { type: 'heatmap', data: metricsData, label: { show: true, fontSize: 13, fontWeight: 'bold', formatter: (p) => p.data[2] != null ? p.data[2] : '' } },
-          { type: 'heatmap', data: orgsData, itemStyle: { color: '#BBDEFB' }, label: { show: true, fontSize: 13, fontWeight: 'bold', color: '#000', formatter: (p) => p.data[2] != null ? p.data[2] : '' } }
+          { type: 'heatmap', data: metricsData, label: { show: true, fontSize: 18, fontWeight: 'bold', formatter: (p) => p.data[2] != null ? p.data[2] : '' } },
+          { type: 'heatmap', data: orgsData, itemStyle: { color: '#BBDEFB' }, label: { show: true, fontSize: 18, fontWeight: 'bold', color: '#000', formatter: (p) => p.data[2] != null ? p.data[2] : '' } }
         ]
       })
     }
@@ -447,16 +447,16 @@ const initStackedBar = () => {
 const initHeatmap = () => {
   const chart = echarts.init(heatmapRef.value)
   chart.setOption({
-    tooltip: { position: 'top', textStyle: { fontSize: 14 }, formatter: (p) => `<b>${chart.getOption().yAxis[0].data[p.data[1]]}</b><br/>${p.name}: <b>${p.data[2]}%</b>` },
-    grid: { left: 220, right: 40, top: 70, bottom: 90 },
-    xAxis: { type: 'category', data: ['Дисциплина (ρ), %', 'Качество (α), %', 'Исполнение (β), %', '% вовремя', '% плана', 'Организации'], position: 'top', axisLabel: { interval: 0, fontSize: 13, fontWeight: 'bold' }, splitArea: { show: true } },
-    yAxis: { type: 'category', data: [], inverse: true, axisLabel: { interval: 0, fontSize: 13, fontWeight: 'bold', width: 200, overflow: 'truncate' }, splitArea: { show: true } },
+    tooltip: { position: 'top', textStyle: { fontSize: 16 }, formatter: (p) => `<b>${chart.getOption().yAxis[0].data[p.data[1]]}</b><br/>${p.name}: <b>${p.data[2]}%</b>` },
+    grid: { left: 260, right: 40, top: 70, bottom: 90 },
+    xAxis: { type: 'category', data: ['Дисциплина (ρ), %', 'Качество (α), %', 'Исполнение (β), %', '% вовремя', '% плана', 'Организации'], position: 'top', axisLabel: { interval: 0, fontSize: 16, fontWeight: 'bold' }, splitArea: { show: true } },
+    yAxis: { type: 'category', data: [], inverse: true, axisLabel: { interval: 0, fontSize: 16, fontWeight: 'bold', width: 240, overflow: 'truncate' }, splitArea: { show: true } },
     visualMap: {
       seriesIndex: 0,
       type: 'piecewise',
       orient: 'horizontal', left: 'center', bottom: 10,
-      itemWidth: 18, itemHeight: 14,
-      textStyle: { fontSize: 13, fontWeight: 'bold' },
+      itemWidth: 22, itemHeight: 18,
+      textStyle: { fontSize: 16, fontWeight: 'bold' },
       pieces: [
         { min: 80, max: 100, label: '80-100% (Отлично)', color: '#C8E6C9' },  // Мягкий зеленый
         { min: 60, max: 80, label: '60-80% (Хорошо)', color: '#E6EE9C' },   // Светло-салатовый

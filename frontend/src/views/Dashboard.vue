@@ -21,37 +21,37 @@
         <v-card class="stat-card hero-card pa-6 text-white" style="background: linear-gradient(135deg, #1B3A5C 0%, #0F2439 100%);">
           <div class="d-flex justify-space-between align-start h-100">
             <div>
-              <div class="text-subtitle-1 font-weight-medium text-white-50 mb-1">Фактические инвестиции</div>
-              <div class="text-h3 font-weight-bold mb-2">{{ formatMoney(animFact) }} <span class="text-h6 font-weight-regular">тыс. ₽</span></div>
-              <v-chip size="small" color="success" variant="flat" class="font-weight-bold">
-                <v-icon start size="14">mdi-trending-up</v-icon> {{ stats.executionPercent }}% освоение
+              <div class="text-h6 font-weight-medium text-white-50 mb-2">Фактические инвестиции</div>
+              <div class="text-h2 font-weight-bold mb-3">{{ formatMoney(animFact) }} <span class="text-h5 font-weight-regular">тыс. ₽</span></div>
+              <v-chip size="default" color="success" variant="flat" class="font-weight-bold text-subtitle-1 px-3 py-4">
+                <v-icon start size="18">mdi-trending-up</v-icon> {{ stats.executionPercent }}% освоение
               </v-chip>
             </div>
-            <v-icon size="64" color="rgba(255,255,255,0.1)">mdi-cash-multiple</v-icon>
+            <v-icon size="80" color="rgba(255,255,255,0.05)">mdi-cash-multiple</v-icon>
           </div>
         </v-card>
       </v-col>
 
       <v-col cols="12" sm="4" lg="2">
         <v-card class="stat-card pa-4 h-100 d-flex flex-column justify-center">
-          <div class="text-caption text-grey-darken-1 font-weight-medium mb-1">ПЛАН (тыс. ₽)</div>
-          <div class="text-h5 font-weight-bold text-warning mb-2">{{ formatMoney(animPlan) }}</div>
-          <v-progress-linear :model-value="stats.executionPercent" color="warning" height="4" rounded />
+          <div class="text-subtitle-2 text-grey-darken-1 font-weight-bold mb-1">ПЛАН (тыс. ₽)</div>
+          <div class="text-h4 font-weight-bold text-warning mb-3">{{ formatMoney(animPlan) }}</div>
+          <v-progress-linear :model-value="stats.executionPercent" color="warning" height="6" rounded />
         </v-card>
       </v-col>
 
       <v-col cols="12" sm="4" lg="2">
         <v-card class="stat-card pa-4 h-100 d-flex flex-column justify-center">
-          <div class="text-caption text-grey-darken-1 font-weight-medium mb-1">ОРГАНИЗАЦИЙ</div>
-          <div class="text-h5 font-weight-bold text-primary mb-2">{{ animTotalOrgs }}</div>
-          <div class="text-caption text-success">С инвестициями: {{ animOrgsWithInvestments }}</div>
+          <div class="text-subtitle-2 text-grey-darken-1 font-weight-bold mb-1">ОРГАНИЗАЦИЙ</div>
+          <div class="text-h4 font-weight-bold text-primary mb-2">{{ animTotalOrgs }}</div>
+          <div class="text-subtitle-1 font-weight-medium text-success">С инвестициями: {{ animOrgsWithInvestments }}</div>
         </v-card>
       </v-col>
 
       <v-col cols="12" sm="4" lg="2">
         <v-card class="stat-card pa-4 h-100 d-flex flex-column justify-center">
-          <div class="text-caption text-grey-darken-1 font-weight-medium mb-1">ОСВОЕНИЕ БЮДЖЕТА</div>
-          <div class="text-h5 font-weight-bold" :class="stats.executionPercent >= 80 ? 'text-success' : 'text-error'">
+          <div class="text-subtitle-2 text-grey-darken-1 font-weight-bold mb-1">ОСВОЕНИЕ БЮДЖЕТА</div>
+          <div class="text-h3 font-weight-bold" :class="stats.executionPercent >= 80 ? 'text-success' : 'text-error'">
             {{ animExec }}%
           </div>
         </v-card>
