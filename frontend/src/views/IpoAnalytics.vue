@@ -53,13 +53,15 @@
     <v-card elevation="2" class="rounded-lg mb-4 px-4 py-3">
       <v-row align="center" dense>
         <v-col cols="12" md="3">
-          <div class="d-flex align-center mb-1">
-            <h2 class="text-h5 font-weight-bold text-blue-darken-4 mb-0" style="white-space: nowrap;">Индекс Поведения Организации (ИПО)</h2>
+          <div class="d-flex align-start mb-1">
+            <h2 class="text-h6 font-weight-bold text-blue-darken-4 mb-0" style="line-height: 1.2;">
+              Индекс Поведения<br>Организации (ИПО)
+            </h2>
             <v-tooltip text="Индекс Поведения Организации: учитывает дисциплину, качество и процент исполнения бюджета" location="bottom">
-              <template v-slot:activator="{ props }"><v-icon v-bind="props" color="grey-darken-1" size="small" class="ml-2 cursor-pointer">mdi-help-circle-outline</v-icon></template>
+              <template v-slot:activator="{ props }"><v-icon v-bind="props" color="grey-darken-1" size="small" class="ml-2 mt-1 cursor-pointer">mdi-help-circle-outline</v-icon></template>
             </v-tooltip>
           </div>
-          <div class="text-subtitle-2 font-weight-bold text-grey-darken-1">Аналитика надёжности (2024-2025)</div>
+          <div class="text-subtitle-2 font-weight-bold text-grey-darken-1 mt-1">Аналитика надёжности (2024-2025)</div>
         </v-col>
         <v-col cols="12" md="9">
           <v-row dense>
@@ -254,11 +256,19 @@ const fetchData = async () => {
       const keep = cats.map((n, i) => (isBad(n) ? -1 : i)).filter(i => i >= 0)
       const newCats = keep.map(i => cats[i])
       
-      // Исключаем серию "Безалаберные" из графика
-      const newSeries = data.stack.series
-        .filter(s => s.name !== 'Безалаберные')
-        .map(s => ({ ...s, data: keep.map(i => s.data[i]) }))
-        
+      // Переименовываем "Безалаберные" в "Непунктуальные"
+      const newSeries = data.stack.series.map(s => {
+        let newName = s.name;
+        if (s.name === 'Безалаберные') {
+          newName = 'Непунктуальные';
+        }
+        return {
+          ...s,
+          name: newName,
+          data: keep.map(i => s.data[i])
+        }
+      });
+      
       charts.value.stack.setOption({
         yAxis: {
           data: newCats,
