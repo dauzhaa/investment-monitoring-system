@@ -54,7 +54,7 @@
       <v-row align="center" dense>
         <v-col cols="12" md="3">
           <div class="d-flex align-center mb-1">
-            <h2 class="text-h4 font-weight-bold text-blue-darken-4 mb-0">Индекс Поведения Организации (ИПО)</h2>
+            <h2 class="text-h5 font-weight-bold text-blue-darken-4 mb-0" style="white-space: nowrap;">Индекс Поведения Организации (ИПО)</h2>
             <v-tooltip text="Индекс Поведения Организации: учитывает дисциплину, качество и процент исполнения бюджета" location="bottom">
               <template v-slot:activator="{ props }"><v-icon v-bind="props" color="grey-darken-1" size="small" class="ml-2 cursor-pointer">mdi-help-circle-outline</v-icon></template>
             </v-tooltip>
@@ -253,7 +253,12 @@ const fetchData = async () => {
       const cats = data.stack.categories
       const keep = cats.map((n, i) => (isBad(n) ? -1 : i)).filter(i => i >= 0)
       const newCats = keep.map(i => cats[i])
-      const newSeries = data.stack.series.map(s => ({ ...s, data: keep.map(i => s.data[i]) }))
+      
+      // Исключаем серию "Безалаберные" из графика
+      const newSeries = data.stack.series
+        .filter(s => s.name !== 'Безалаберные')
+        .map(s => ({ ...s, data: keep.map(i => s.data[i]) }))
+        
       charts.value.stack.setOption({
         yAxis: {
           data: newCats,
