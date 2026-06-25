@@ -1,6 +1,5 @@
 <template>
   <v-container fluid class="pa-0 d-flex flex-column bg-grey-lighten-4" style="height: 100vh;">
-    <!-- Хедер -->
     <v-app-bar flat color="white" border="bottom">
       <v-btn v-if="messages.length > 0" icon="mdi-arrow-left" color="primary" class="ml-2 mr-2" @click="clearChat"></v-btn>
       <v-icon v-else color="primary" class="mr-3 ml-4">mdi-robot-outline</v-icon>
@@ -14,14 +13,11 @@
       </v-btn>
     </v-app-bar>
 
-    <!-- Область чата -->
     <v-main class="flex-grow-1 overflow-y-auto" ref="messagesArea">
-      <v-container class="pa-4" style="max-width: 900px;">
+      <v-container class="pa-4 w-100" style="max-width: 1400px;">
         
-        <!-- Приветственный экран -->
         <WelcomeScreen v-if="messages.length === 0" @suggestion="sendMessage" />
 
-        <!-- Сообщения -->
         <div v-else class="d-flex flex-column gap-4">
           <MessageBubble
             v-for="(msg, idx) in messages"
@@ -29,13 +25,11 @@
             :message="msg"
           />
           
-          <!-- Индикатор загрузки -->
           <div v-if="isThinking" class="d-flex align-center text-grey mt-2">
-            <v-progress-circular indeterminate size="20" width="2" color="primary" class="mr-3"></v-progress-circular>
-            <span class="text-body-2">Анализирую данные...</span>
+            <v-progress-circular indeterminate size="24" width="3" color="primary" class="mr-3"></v-progress-circular>
+            <span class="text-h6 font-weight-bold" style="color: #000;">Анализирую данные...</span>
           </div>
 
-          <!-- Follow-up вопросы -->
           <FollowUpSuggestions 
             v-if="!isThinking && followUps.length" 
             :suggestions="followUps" 
@@ -45,9 +39,8 @@
       </v-container>
     </v-main>
 
-    <!-- Подвал с вводом -->
     <v-footer app color="transparent" class="pa-0 border-t bg-white">
-      <v-container style="max-width: 900px;" class="py-3 px-4">
+      <v-container style="max-width: 1400px;" class="py-3 px-4 w-100">
         <ChatInput 
           v-model="input" 
           :disabled="isThinking" 
@@ -85,37 +78,30 @@ const scrollToBottom = async () => {
 const sendMessage = async (text) => {
   if (!text.trim() || isThinking.value) return
   
-  // Добавляем сообщение пользователя в UI
   messages.value.push({ role: 'user', content: text })
   input.value = ''
   isThinking.value = true
-  followUps.value = [] // Скрываем старые подсказки пока идет загрузка
+  followUps.value = []
   await scrollToBottom()
 
   try {
-    // 1. Подготавливаем историю диалога для бэкенда.
-    // Pydantic схема ждет только role и content, поэтому отсекаем лишнее (например, tool_calls).
     const apiMessages = messages.value.map(m => ({
       role: m.role,
       content: m.content || ''
     }))
 
-    // 2. Отправляем реальный запрос на эндпоинт бота
     const response = await axios.post('/api/v1/bot/chat', {
       messages: apiMessages
     })
 
     const data = response.data
 
-    // 3. Сохраняем ответ ассистента в UI
     messages.value.push({
       role: 'assistant',
-      content: data.answer || '', // Поле answer берется из твоего bot.py
-      // Если в будущем бэкенд научится отдавать tool_calls напрямую массивом — фронт их подхватит
+      content: data.answer || '',
       tool_calls: data.tool_calls || [] 
     })
 
-    // (Опционально) Если бэкенд начнет отдавать эти поля, фронт обновит счетчики и кнопки:
     if (data.tokens_used) tokensUsed.value += data.tokens_used
     if (data.followUps) followUps.value = data.followUps
 
@@ -123,7 +109,7 @@ const sendMessage = async (text) => {
     console.error('Ошибка при обращении к ИИ:', error)
     messages.value.push({ 
       role: 'assistant', 
-      content: '❌ Произошла ошибка при обращении к серверу. Пожалуйста, проверьте подключение или логи бэкенда.' 
+      content: '❌ **Произошла ошибка при обращении к серверу.** Пожалуйста, проверьте подключение или логи бэкенда.' 
     })
   } finally {
     isThinking.value = false
@@ -138,5 +124,5 @@ const clearChat = () => {
 </script>
 
 <style scoped>
-.gap-4 { gap: 16px; }
+.gap-4 { gap: 24px; } /* Увеличил отступ между сообщениями */
 </style>
