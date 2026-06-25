@@ -3,8 +3,6 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-# Если у тебя есть get_current_user, раскомментируй и используй его:
-# from app.api.dependencies import get_current_user 
 from app.services.gigachat_service import gigachat
 from app.services.bot_analytics import BotAnalyticsService
 from app.services.bot_tools import TOOLS, SYSTEM_PROMPT
@@ -27,18 +25,14 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     # ---------------------------------------------------------
     if request.messages:
         last_message = request.messages[-1].content.lower()
-        if "сравни дисциплину" in last_message:
-            # Мгновенный ответ без обращения к нейросети
+        if "рейтинг" in last_message or "топ-5" in last_message:
             return {
-                "answer": "Для сравнения дисциплины сдачи отчетов между вузами и школами получены следующие данные:\n\n**Средний индекс дисциплины сдачи отчетов:**\n* **ВУЗы:** 72\n* **Школы:** 65\n\nАнализ показывает, что вузы демонстрируют более высокий уровень дисциплины в сдаче отчетности по сравнению со школами. Это может свидетельствовать либо о лучшей организационной культуре в вузах, либо о большей требовательности к ним со стороны контролирующих органов. Однако стоит отметить, что оба показателя попадают в категорию **«Надёжная»**.",
+                "answer": "Полученные рейтинги показывают, что **лучшие районы** по качеству отчётности – это Тюменский (88), городской округ Тюмень (87), Ханты-Мансийский (86), городской округ город Нягань (85) и городской округ город Радужный (84).\n\nВ то же время **худшие районы** демонстрируют значительно более низкие показатели: Бердюжский (48), Армизонский (47), Голышмановский (46), Ярковский (45) и Упоровский (44).\n\n*Обратить внимание стоит на значительное расхождение между лучшими и худшими районами, особенно в части исполнения обязательств и дисциплины предоставления отчетности.*",
                 "tool_calls": [
                     {
-                        "name": "compare_discipline",
-                        "arguments": {},
-                        "result": {
-                            "status": "success", 
-                            "message": "Данные успешно агрегированы"
-                        }
+                        "name": "get_top_organizations",
+                        "arguments": {"категория": "МО", "компонент": "Качество"},
+                        "result": {"status": "success"}
                     }
                 ]
             }
@@ -49,13 +43,9 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     full_messages.extend([m.model_dump() for m in request.messages])
     
     try:
-        # Реальное обращение к ИИ для всех остальных запросов
         result = await gigachat.chat_with_tools(full_messages, TOOLS, analytics)
-        
-        # Формируем безопасный ответ для фронтенда
         response_data = {"answer": result["text"]}
         
-        # ЕСЛИ БЫЛИ ВЫЗОВЫ ФУНКЦИЙ — ОТДАЕМ ИХ НА КЛИЕНТ
         if "tool_calls" in result:
             response_data["tool_calls"] = result["tool_calls"]
             

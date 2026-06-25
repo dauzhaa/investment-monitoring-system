@@ -4,9 +4,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import RankingChart from './renderers/RankingChart.vue'
-// Импортируем новый график для презентации
-import DisciplineChart from './renderers/DisciplineChart.vue' 
+import RankingChart from './renderers/RankingChart.vue' // <--- ТВОЙ НОВЫЙ ГРАФИК
 
 const props = defineProps({
   toolName: String,
@@ -14,9 +12,7 @@ const props = defineProps({
 })
 
 const RENDERERS = {
-  get_top_organizations: RankingChart,
-  // Временно (или постоянно) привязываем этот вызов к нашему новому графику
-  compare_discipline: DisciplineChart 
+  get_top_organizations: RankingChart // <--- СВЯЗКА
 }
 
 const rendererComponent = computed(() => {
